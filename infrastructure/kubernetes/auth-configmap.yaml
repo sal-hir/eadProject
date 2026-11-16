@@ -11,3 +11,7 @@ data:
   COOKIE_SECURE: "true"
   JWT_ISSUER: swiftdrop-auth
   JWT_TTL_SECONDS: "900"
+  MERCHANT_SERVICE_URL: http://merchant-service:4001
+  COURIER_SERVICE_URL: http://courier-service:4003
+  TRACKING_SERVICE_URL: http://tracking-service:4004
+  NOTIFICATION_SERVICE_URL: http://notification-service:4005

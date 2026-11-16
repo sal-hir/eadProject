@@ -28,6 +28,42 @@ only the auth schema inside neondb. Existing public/Prisma tables and old local
 data volumes are neither migrated nor deleted. Never use
 `docker compose down -v` if you need to preserve data.
 
+## Centralized API Documentation & Swagger UI
+
+SwiftDrop provides a centralized Swagger UI where developers can explore, inspect, and execute requests against all backend microservices from a single interface.
+
+### Accessing the Centralized Swagger UI
+
+- **Centralized Swagger UI:** [http://localhost:4000/swagger-ui.html](http://localhost:4000/swagger-ui.html)
+- Use the **Select a definition** dropdown in the top-right corner to switch between service specifications:
+  - **1. Authentication & Identity Service** (Local: `/v3/api-docs`)
+  - **2. Merchant Management Service** (Aggregated: `/v3/api-docs/services/merchant`, Direct: `http://localhost:4001/v3/api-docs`)
+  - **3. Courier & Delivery Service** (Aggregated: `/v3/api-docs/services/courier`, Direct: `http://localhost:4003/v3/api-docs`)
+  - **4. Tracking Service** (Aggregated: `/v3/api-docs/services/tracking`, Direct: `http://localhost:4004/v3/api-docs`)
+  - **5. Notification Service** (Aggregated: `/v3/api-docs/services/notification`)
+
+### Individual OpenAPI Specification URLs
+
+| Service | Direct OpenAPI URL | Aggregated OpenAPI URL | Direct Swagger UI |
+|---|---|---|---|
+| **Auth Service** | `http://localhost:4000/v3/api-docs` | `/v3/api-docs` | `http://localhost:4000/swagger-ui.html` |
+| **Merchant Service** | `http://localhost:4001/v3/api-docs` | `/v3/api-docs/services/merchant` | `http://localhost:4001/swagger-ui.html` |
+| **Courier Service** | `http://localhost:4003/v3/api-docs` | `/v3/api-docs/services/courier` | `http://localhost:4003/swagger-ui.html` |
+| **Tracking Service** | `http://localhost:4004/v3/api-docs` | `/v3/api-docs/services/tracking` | `http://localhost:4004/swagger-ui.html` |
+| **Notification Service** | `http://localhost:4005/health` | `/v3/api-docs/services/notification` | — |
+
+> [!NOTE]
+> If a downstream service is offline or unreachable, the aggregation endpoint returns HTTP 503 Service Unavailable with an informative message rather than silently displaying empty or stale documentation.
+
+### Authentication Instructions for Protected Endpoints
+
+1. In Swagger UI, expand the **Authentication** group and run `POST /api/v1/auth/login` (or register a customer account first via `POST /api/v1/auth/register`).
+2. Copy the `data.token` string from the successful login response.
+3. Click the **Authorize 🔓** button in the top-right corner of Swagger UI.
+4. Paste the token into the `bearerAuth` field and click **Authorize**.
+5. All subsequent "Try it out" requests to protected endpoints (e.g. `GET /api/v1/auth/me`, `POST /api/v1/merchants/applications`, `GET /api/v1/couriers/my-deliveries`) will automatically include the `Authorization: Bearer <token>` header.
+
+
 ## Run Java and React directly
 
 Requires Java 21, Maven 3.9+, Node 22.12+ and access to Neon. The local .env is

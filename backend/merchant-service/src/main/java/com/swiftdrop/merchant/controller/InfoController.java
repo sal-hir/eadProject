@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.swiftdrop.merchant.dto.InfoResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * Public system information endpoint.
@@ -20,6 +22,7 @@ import com.swiftdrop.merchant.dto.InfoResponse;
  * health dashboards, and Swagger/OpenAPI aggregation UIs.</p>
  */
 @RestController
+@Tag(name = "System Information", description = "Public service metadata, version, runtime details, and health status")
 public class InfoController {
 
     private final @Nullable BuildProperties build;
@@ -39,6 +42,7 @@ public class InfoController {
     }
 
     @GetMapping("/api/v1/info")
+    @Operation(summary = "Get service metadata", description = "Returns service name, version, runtime stats, and health status for monitoring dashboards and API aggregators.")
     public ResponseEntity<InfoResponse> info() {
         String version = build != null ? build.getVersion() : serviceVersion;
         InfoResponse body = new InfoResponse(

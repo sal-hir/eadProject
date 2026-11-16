@@ -67,9 +67,9 @@ public class SecurityConfig {
     }
     @Bean CorsConfigurationSource corsConfigurationSource(@Value("${app.frontend-url}") String frontend) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(frontend));
-        config.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-SwiftDrop-CSRF"));
+        config.setAllowedOrigins(List.of(frontend, "http://localhost:4000", "http://127.0.0.1:4000", "http://localhost:3000", "http://127.0.0.1:3000"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-SwiftDrop-CSRF", "Accept", "Origin", "X-Requested-With"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config); return source;
@@ -86,6 +86,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/oauth/exchange", "/api/v1/auth/providers", "/api/v1/auth/refresh", "/api/v1/auth/logout", "/api/v1/auth/activate").permitAll()
                 .requestMatchers("/api/v1/info").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                .requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/api/v1/auth/admin/me").hasAnyRole("ADMIN", "DISPATCHER")
                 .requestMatchers("/api/v1/auth/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/auth/internal/**").hasRole("ADMIN")
