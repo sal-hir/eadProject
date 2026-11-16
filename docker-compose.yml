@@ -1,0 +1,56 @@
+services:
+  auth-service:
+    build: ./backend/auth-service
+    environment:
+      AUTH_DB_URL: ${AUTH_DB_URL:?Set the Neon JDBC URL in .env}
+      AUTH_MIGRATION_DB_URL: ${AUTH_MIGRATION_DB_URL:?Set the direct Neon JDBC URL in .env}
+      AUTH_DB_USER: ${AUTH_DB_USER:-swiftdrop}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set a random JWT_SECRET of at least 32 bytes}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:4000/login/oauth2/code/google}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:4000/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 10
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:4000}
+    ports:
+      - "3000:80"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Preserved legacy components, opt-in only. No auth events are published yet.
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    profiles: [ "legacy-notifications" ]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-swiftdrop}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-swiftdrop_pass}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+
+volumes:
+  # Old data volumes remain declared and are never migrated or deleted.
+  postgres_data:
+  rabbitmq_data:
+  uploads_data:
+  auth_postgres_data:
