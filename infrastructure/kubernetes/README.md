@@ -7,6 +7,12 @@ with two replicas, probes and resource requests/limits. It also requires the pri
 [Member 5 deployment and webhook setup](../../docs/merchant-webhooks.md).
 No cluster rollout, registry publication or Member 10 Ingress/Helm release is performed.
 
+Replace the ConfigMap's Neon endpoint placeholders with your connection settings.
+AUTH_DB_URL uses the pooled JDBC URL; AUTH_MIGRATION_DB_URL uses the direct URL
+for the same database. Set AUTH_DB_USER to the database role and put its password
+in auth-secrets. Flyway owns only the auth schema; existing tables in other
+schemas remain untouched.
+
 ## Files and ownership
 
 | File | Kubernetes object | Contents |
