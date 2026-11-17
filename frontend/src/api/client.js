@@ -30,6 +30,18 @@ export const sessionRequest = (endpoint, payload = {}) => {
   sessionQueue = pending.catch(() => {});
   return pending;
 };
+
+export const PARCEL_API_BASE_URL = (
+  import.meta.env.VITE_PARCEL_API_URL || 'http://localhost:4002'
+).replace(/\/$/, '');
+
+export const parcelApi = axios.create({
+  baseURL: `${PARCEL_API_BASE_URL}/api/v1`,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
 export const refreshSession = () => {
   if (!refreshPromise) {
     refreshPromise = sessionRequest('/auth/refresh').then(response => response.data.data)
@@ -65,6 +77,7 @@ instance.interceptors.response.use(
 };
 installAuthentication(api);
 installAuthentication(merchantApi);
+installAuthentication(parcelApi);
 export const authError = (error, fallback) => {
   const body = error.response?.data;
   const fields = Object.entries(body?.errors || {}).map(([field, message]) => `${field}: ${message}`);
@@ -72,3 +85,4 @@ export const authError = (error, fallback) => {
 };
 export const dashboardPath = (role) =>
   ({ ADMIN: '/admin', DISPATCHER: '/admin', COURIER: '/courier', MERCHANT: '/merchant' }[role] || '/customer');
+
