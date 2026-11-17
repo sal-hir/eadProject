@@ -1,0 +1,52 @@
+server:
+  port: 4009
+  shutdown: graceful
+
+spring:
+  application:
+    name: admin-service
+
+  config:
+    import: "optional:file:./.env[.properties]"
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 0
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    url: ${DB_MIGRATION_URL:${spring.datasource.url}}
+    user: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
+        liveness:
+          include: livenessState
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  auth-url: ${AUTH_SERVICE_URL:http://localhost:4000}
