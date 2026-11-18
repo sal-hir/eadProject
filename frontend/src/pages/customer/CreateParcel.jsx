@@ -11,10 +11,7 @@ import {
   Package
 } from 'lucide-react';
 
-import {
-  createParcel,
-  getBookingZones
-} from '../../api/parcelApi';
+import { parcelApi } from '../../api/client';
 
 export const CreateParcel = () => {
   const navigate = useNavigate();
@@ -56,7 +53,7 @@ export const CreateParcel = () => {
         setLoadingZones(true);
         setError('');
 
-        const response = await getBookingZones();
+        const response = await parcelApi.get('/parcels/booking/zones');
 
         if (!active) return;
 
@@ -138,7 +135,7 @@ export const CreateParcel = () => {
     setSubmitting(true);
 
     try {
-      const response = await createParcel({
+      const response = await parcelApi.post('/parcels', {
         pickupAddress:
           `${form.pickupAddress.trim()}, ${form.pickupCity.trim()}`,
 

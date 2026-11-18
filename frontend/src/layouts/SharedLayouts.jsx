@@ -89,12 +89,22 @@ export function navigationFor(role) {
             label: ' Analytics',
             icon: ChartNoAxesCombined,
           },
+          {
+            to: '/dispatcher/dashboard',
+            label: 'Dispatch',
+            icon: Truck,
+          },
         ]
       : []),
 
     // Dispatcher Navigation
     ...(role === 'DISPATCHER'
       ? [
+          {
+            to: '/dispatcher/dashboard',
+            label: 'Dispatch',
+            icon: Truck,
+          },
           {
             to: '/admin/analytics',
             label: 'Management Analytics',

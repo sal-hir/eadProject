@@ -19,10 +19,8 @@ import { AccountSettings } from './pages/AccountSettings';
 import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery';
 import { MerchantApply, MerchantStatus, MerchantDashboard } from './pages/MerchantOnboarding';
 import { AdminMerchants } from './pages/AdminMerchants';
-import { AdminMerchantCredentials } from './pages/admin/AdminMerchantCredentials';
-import { AdminMerchantOAuthClients } from './pages/admin/AdminMerchantOAuthClients';
-import { MerchantCredentials } from './pages/merchant/MerchantCredentials';
-import { MerchantOAuthClients } from './pages/merchant/MerchantOAuthClients';
+import { MerchantCredentials } from './pages/MerchantCredentials';
+import { MerchantOAuthClients } from './pages/MerchantOAuthClients';
 import { PublicTracking } from './pages/PublicTracking';
 import { Pricing } from './pages/Pricing';
 import { Help } from './pages/Help';
@@ -35,6 +33,7 @@ import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { CustomerDashboard } from './pages/customer/CustomerDashboard';
 import { CreateParcel } from './pages/customer/CreateParcel';
 import { ParcelDetails } from './pages/customer/ParcelDetail';
+import DispatcherDashboard from './pages/dispatcher/DispatcherDashboard';
 
 // Protected Route Guard
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -87,8 +86,6 @@ export const App = () => {
                     {/* Admin Routes */}
                     <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminUsers /></ProtectedRoute>} />
                     <Route path="/admin/merchants" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminMerchants /></ProtectedRoute>} />
-                    <Route path="/admin/merchants/:merchantId/credentials" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminMerchantCredentials /></ProtectedRoute>} />
-                    <Route path="/admin/merchants/:merchantId/oauth-clients" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminMerchantOAuthClients /></ProtectedRoute>} />
 
                     {/* Merchant Routes */}
                     <Route path="/merchant/credentials" element={<ProtectedRoute allowedRoles={['MERCHANT']}><MerchantCredentials /></ProtectedRoute>} />
@@ -148,6 +145,14 @@ export const App = () => {
                       element={
                         <ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}>
                           <AdminDashboard />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/dispatcher/dashboard"
+                      element={
+                        <ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}>
+                          <DispatcherDashboard />
                         </ProtectedRoute>
                       }
                     />
