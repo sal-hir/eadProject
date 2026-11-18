@@ -18,6 +18,7 @@ import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery';
 import { MerchantApply, MerchantStatus, MerchantDashboard } from './pages/MerchantOnboarding';
 import { AdminMerchants } from './pages/AdminMerchants';
 import { PublicTracking } from './pages/PublicTracking';
+import { CourierDashboard } from './pages/courier/CourierDashboard';
 import { Pricing } from './pages/Pricing';
 import { Help } from './pages/Help';
 import { Contact } from './pages/Contact';
@@ -105,7 +106,7 @@ export const App = () => {
                   path="/courier"
                   element={
                     <ProtectedRoute allowedRoles={['COURIER', 'ADMIN']}>
-                      <MilestoneUnavailable title="Courier dashboard" />
+                      <CourierDashboard />
                     </ProtectedRoute>
                   }
                 />
