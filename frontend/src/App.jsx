@@ -38,8 +38,8 @@ import { AccountSettings } from './pages/AccountSettings';
 // Admin & Dispatcher
 import { AdminUsers } from './pages/AdminUsers';
 import { AdminMerchants } from './pages/AdminMerchants';
-import { AdminMerchantCredentials } from './pages/admin/AdminMerchantCredentials';
-import { AdminMerchantOAuthClients } from './pages/admin/AdminMerchantOAuthClients';
+import { AdminMerchantCredentials } from './pages/MerchantCredentials';
+import { AdminMerchantOAuthClients } from './pages/MerchantOAuthClients';
 import AdminAnalytics from './pages/admin/AdminAnalytics';
 import PricingManagement from './pages/admin/PricingManagement';
 import ZoneManagement from './pages/admin/ZoneManagement';
@@ -52,8 +52,8 @@ import {
   MerchantStatus,
   MerchantDashboard
 } from './pages/MerchantOnboarding';
-import { MerchantCredentials } from './pages/merchant/MerchantCredentials';
-import { MerchantOAuthClients } from './pages/merchant/MerchantOAuthClients';
+import { MerchantCredentials } from './pages/MerchantCredentials';
+import { MerchantOAuthClients } from './pages/MerchantOAuthClients';
 
 // Protected Route Guard
 const ProtectedRoute = ({ children, allowedRoles }) => {
