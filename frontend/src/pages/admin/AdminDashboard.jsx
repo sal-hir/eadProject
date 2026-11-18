@@ -1,5 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from 'react';
+
 import { Link } from 'react-router-dom';
+
 import {
   Package,
   CheckCircle2,
@@ -16,6 +23,7 @@ import {
   Store,
   BarChart3,
   ArrowUpRight,
+  ArrowUpRight,
   ChevronRight,
   Truck,
   Shield,
@@ -31,13 +39,15 @@ import {
   Radio,
 } from 'lucide-react';
 import { api } from '../../api/client';
-import { analyticsApi, zoneApi, pricingApi } from '../../api/adminApi';
+import { dispatchAnalyticsApi } from '../../api/dispatchApi';
+import { zoneApi, pricingApi } from '../../api/adminApi';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Modal } from '../../components/ui';
 
 export const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [parcelFilter, setParcelFilter] = useState('ALL');
   const [copiedTracking, setCopiedTracking] = useState('');
@@ -48,7 +58,8 @@ export const AdminDashboard = () => {
   const [deliveryStatuses, setDeliveryStatuses] = useState([]);
   const [zones, setZones] = useState([]);
   const [pricingRules, setPricingRules] = useState([]);
-  const [recentParcels, setRecentParcels] = useState([]);
+
+  // Courier Service
   const [couriers, setCouriers] = useState([]);
 
   // Assignment Modal
@@ -638,7 +649,7 @@ export const AdminDashboard = () => {
         <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="font-bold text-slate-900">
                 Recent Parcel Activities
               </h3>
               <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
@@ -691,12 +702,13 @@ export const AdminDashboard = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 text-slate-500 uppercase font-semibold border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-3.5">Tracking Number</th>
-                  <th className="px-6 py-3.5">Route</th>
-                  <th className="px-6 py-3.5">Recipient</th>
-                  <th className="px-6 py-3.5">Weight</th>
-                  <th className="px-6 py-3.5">Status</th>
-                  <th className="px-6 py-3.5 text-right">Actions</th>
+                  <th className="px-5 py-4">Tracking Number</th>
+                  <th className="px-5 py-4">Route</th>
+                  <th className="px-5 py-4">Recipient</th>
+                  <th className="px-5 py-4">Weight</th>
+                  <th className="px-5 py-4">Status</th>
+                  <th className="px-5 py-4">Courier</th>
+                  <th className="px-5 py-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -715,7 +727,7 @@ export const AdminDashboard = () => {
                             {copiedTracking === parcel.trackingNumber ? (
                               <Check size={13} className="text-emerald-600" />
                             ) : (
-                              <Copy size={13} />
+                              <Copy size={13} className="text-slate-400" />
                             )}
                           </button>
                         )}
@@ -739,11 +751,13 @@ export const AdminDashboard = () => {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 font-medium text-slate-600">
-                      {parcel.weightKg ? `${parcel.weightKg} kg` : '—'}
+                    <td className="px-5 py-4 text-slate-600">
+                      {parcel.weightKg != null
+                        ? `${parcel.weightKg} kg`
+                        : '—'}
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       <StatusBadge status={parcel.status || 'PENDING'} />
                     </td>
 
@@ -779,7 +793,7 @@ export const AdminDashboard = () => {
         <Modal
           open={Boolean(assigningParcel)}
           onClose={() => setAssigningParcel(null)}
-          title={`Assign Courier to ${assigningParcel.trackingNumber}`}
+          title={`Assign Courier - ${assigningParcel.trackingNumber}`}
         >
           <div className="space-y-4 pt-1">
             <div className="rounded-xl bg-slate-50 p-3.5 text-xs space-y-1 text-slate-600 border border-slate-200">
@@ -1197,6 +1211,74 @@ function WeeklyBarChart({ data = [], loading = false }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// LOCATION LIST
+function LocationList({ title, locations = [], loading }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center gap-2">
+        <MapPin size={18} className="text-blue-600" />
+        <h3 className="font-bold text-slate-900">{title}</h3>
+      </div>
+
+      {loading ? (
+        <LoadingText />
+      ) : locations.length === 0 ? (
+        <EmptyText text="No location information available." />
+      ) : (
+        <div className="space-y-3">
+          {locations.slice(0, 5).map((item, index) => (
+            <div
+              key={index}
+              className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0"
+            >
+              <span className="text-xs text-slate-700">
+                {item.location ||
+                  item.address ||
+                  item.city ||
+                  item.name ||
+                  'Unknown location'}
+              </span>
+
+              <strong className="text-xs text-slate-900">
+                {item.count ?? item.total ?? 0}
+              </strong>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// SMALL METRIC
+function Metric({ label, value, prefix = '' }) {
+  return (
+    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <span className="text-xs text-slate-500">{label}</span>
+      <strong className="text-sm text-slate-900">
+        {value != null ? `${prefix}${Number(value).toLocaleString()}` : '—'}
+      </strong>
+    </div>
+  );
+}
+
+function LoadingText() {
+  return (
+    <div className="flex min-h-32 items-center justify-center gap-2 text-xs text-slate-400">
+      <RefreshCw size={16} className="animate-spin" />
+      Loading data...
+    </div>
+  );
+}
+
+function EmptyText({ text }) {
+  return (
+    <div className="flex min-h-32 items-center justify-center text-center text-xs text-slate-400">
+      {text}
     </div>
   );
 }

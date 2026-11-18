@@ -17,7 +17,8 @@ public class EventPublisherService {
         this.rabbitTemplate = rabbitTemplate;
     }
 
-    public void publishParcelStatusEvent(String parcelId, String trackingNumber, String status, String courierId, String pickupAddress, String dropoffAddress){
+    public void publishParcelStatusEvent(String parcelId, String trackingNumber, String status, String courierId,
+            String pickupAddress, String dropoffAddress) {
         ParcelStatusEvent event = new ParcelStatusEvent(
                 parcelId,
                 trackingNumber,
@@ -36,5 +37,4 @@ public class EventPublisherService {
         System.out.println("Published Event to RabbitMQ: " + event);
     }
 
-    
 }
