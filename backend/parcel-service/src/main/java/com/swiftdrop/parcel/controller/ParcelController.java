@@ -63,6 +63,24 @@ public class ParcelController {
         );
     }
 
+    @GetMapping("/all")
+    public ResponseEntity<List<ParcelResponse>> getAllParcels(
+            @AuthenticationPrincipal IdentityGateway.Caller caller,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization
+    ) {
+        String token = extractToken(authorization);
+
+        if (caller == null || (!"DISPATCHER".equalsIgnoreCase(caller.role()) && !"ADMIN".equalsIgnoreCase(caller.role()))) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "You are not authorized to access parcel synchronization"
+            );
+        }
+
+        List<ParcelResponse> parcels = parcelService.getAllParcelsForSync(caller);
+
+        return ResponseEntity.ok(parcels);
+    }
     @GetMapping("/{parcelId}")
     public ResponseEntity<ParcelResponse> getParcelById(
             @PathVariable UUID parcelId,

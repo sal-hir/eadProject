@@ -1,4 +1,3 @@
-
 package com.swiftdrop.parcel.entity;
 
 import jakarta.persistence.*;
@@ -39,7 +38,7 @@ public class Parcel {
 
     @Column(name = "dropoff_address", nullable = false, columnDefinition = "TEXT")
     private String dropoffAddress;
-    //added
+
     @Column(name = "sender_name", nullable = false, length = 100)
     private String senderName;
 
@@ -53,7 +52,7 @@ public class Parcel {
     private String receiverPhone;
 
     @Column(name = "parcel_description", nullable = false, length = 500)
-    private String parcelDescription; //end
+    private String parcelDescription;
 
     @Column(name = "pickup_zone_id", nullable = false)
     private UUID pickupZoneId;

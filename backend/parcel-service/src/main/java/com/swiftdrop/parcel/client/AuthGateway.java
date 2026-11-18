@@ -25,10 +25,11 @@ public class AuthGateway implements IdentityGateway {
 
         URI uri = URI.create(url);
 
+        boolean isLocalOrInternal = Set.of("localhost", "127.0.0.1", "[::1]", "auth-service").contains(uri.getHost())
+                || !uri.getHost().contains(".");
+
         if (!"https".equals(uri.getScheme())
-                && !("http".equals(uri.getScheme())
-                && Set.of("localhost", "127.0.0.1", "[::1]")
-                .contains(uri.getHost()))) {
+                && !("http".equals(uri.getScheme()) && isLocalOrInternal)) {
 
             throw new IllegalArgumentException(
                     "Auth Service communication requires HTTPS outside localhost"

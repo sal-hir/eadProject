@@ -1,4 +1,3 @@
-
 package com.swiftdrop.parcel.config;
 
 import com.swiftdrop.parcel.client.IdentityGateway;
@@ -49,7 +48,8 @@ public class SecurityConfig {
                                 "/actuator/health/**"
                         ).permitAll()
                         .requestMatchers(
-                                "/api/v1/parcels/tracking/**"
+                                "/api/v1/parcels/tracking/**",
+                                "/api/v1/parcels/all"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
@@ -60,7 +60,6 @@ public class SecurityConfig {
                 );
 
         return http.build();
-
     }
 
     @Bean

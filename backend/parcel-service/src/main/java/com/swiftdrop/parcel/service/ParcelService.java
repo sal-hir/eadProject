@@ -1,4 +1,3 @@
-
 package com.swiftdrop.parcel.service;
 
 import com.swiftdrop.parcel.client.IdentityGateway;
@@ -11,16 +10,16 @@ import com.swiftdrop.parcel.entity.Parcel;
 import com.swiftdrop.parcel.entity.ParcelStatus;
 import com.swiftdrop.parcel.entity.ParcelStatusHistory;
 import com.swiftdrop.parcel.repository.ParcelRepository;
-
 import com.swiftdrop.parcel.repository.ParcelStatusHistoryRepository;
 import lombok.RequiredArgsConstructor;
-
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,9 +28,10 @@ import java.util.UUID;
 public class ParcelService {
 
     private final ParcelRepository parcelRepository;
-    private final MerchantGateway merchantGateway;
+    private final ObjectProvider<MerchantGateway> merchantGatewayProvider;
     private final ParcelPricingService parcelPricingService;
     private final ParcelStatusHistoryRepository statusHistoryRepository;
+    private final ParcelEventPublisher parcelEventPublisher;
 
     @Transactional
     public ParcelResponse createParcel(
@@ -52,22 +52,16 @@ public class ParcelService {
         Parcel parcel = new Parcel();
 
         if ("CUSTOMER".equalsIgnoreCase(caller.role())) {
-
             parcel.setCustomerId(caller.id());
             parcel.setMerchantId(null);
-
         } else if ("MERCHANT".equalsIgnoreCase(caller.role())) {
-
-            UUID merchantId = merchantGateway.getApprovedMerchantId(
+            UUID merchantId = getMerchantGateway().getApprovedMerchantId(
                     token,
                     caller.id()
             );
-
             parcel.setMerchantId(merchantId);
             parcel.setCustomerId(null);
-
         } else {
-
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Your role cannot create parcel bookings"
@@ -77,22 +71,20 @@ public class ParcelService {
         parcel.setPickupAddress(request.pickupAddress());
         parcel.setDropoffAddress(request.dropoffAddress());
 
-        //added
         parcel.setSenderName(request.senderName());
         parcel.setSenderPhone(request.senderPhone());
 
         parcel.setReceiverName(request.receiverName());
         parcel.setReceiverPhone(request.receiverPhone());
 
-        parcel.setParcelDescription(request.parcelDescription());//
+        parcel.setParcelDescription(request.parcelDescription());
 
         parcel.setPickupZoneId(request.pickupZoneId());
         parcel.setDropoffZoneId(request.dropoffZoneId());
 
         parcel.setPricingId(quote.pricingId());
-        //changed
-        BigDecimal finalFee = quote.estimatedFee();
 
+        BigDecimal finalFee = quote.estimatedFee();
         if ("EXPRESS".equals(request.deliveryPriority())) {
             finalFee = finalFee.add(new BigDecimal("200.00"));
         }
@@ -109,6 +101,18 @@ public class ParcelService {
 
         recordStatusChange(savedParcel, ParcelStatus.CREATED, caller);
 
+        try {
+            parcelEventPublisher.publishParcelCreated(
+                    savedParcel.getParcelId(),
+                    savedParcel.getTrackingNumber(),
+                    savedParcel.getCurrentStatus(),
+                    savedParcel.getPickupAddress(),
+                    savedParcel.getDropoffAddress()
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to publish parcel created event to RabbitMQ: " + e.getMessage());
+        }
+
         return mapToResponse(savedParcel);
     }
 
@@ -119,7 +123,6 @@ public class ParcelService {
     ) {
 
         if ("CUSTOMER".equalsIgnoreCase(caller.role())) {
-
             return parcelRepository
                     .findByCustomerIdOrderByCreatedAtDesc(caller.id())
                     .stream()
@@ -128,8 +131,7 @@ public class ParcelService {
         }
 
         if ("MERCHANT".equalsIgnoreCase(caller.role())) {
-
-            UUID merchantId = merchantGateway.getApprovedMerchantId(
+            UUID merchantId = getMerchantGateway().getApprovedMerchantId(
                     token,
                     caller.id()
             );
@@ -163,16 +165,12 @@ public class ParcelService {
         boolean owner = false;
 
         if ("CUSTOMER".equalsIgnoreCase(caller.role())) {
-
             owner = caller.id().equals(parcel.getCustomerId());
-
         } else if ("MERCHANT".equalsIgnoreCase(caller.role())) {
-
-            UUID merchantId = merchantGateway.getApprovedMerchantId(
+            UUID merchantId = getMerchantGateway().getApprovedMerchantId(
                     token,
                     caller.id()
             );
-
             owner = merchantId.equals(parcel.getMerchantId());
         }
 
@@ -259,7 +257,7 @@ public class ParcelService {
             IdentityGateway.Caller caller
     ) {
 
-        requireRole(caller, "DISPATCHER");
+        requireRole(caller, "DISPATCHER", "ADMIN");
 
         if (courierId == null) {
             throw new ResponseStatusException(
@@ -360,7 +358,6 @@ public class ParcelService {
     ) {
 
         return switch (current) {
-
             case ASSIGNED_TO_COURIER ->
                     next == ParcelStatus.PENDING_PICKUP;
 
@@ -384,14 +381,15 @@ public class ParcelService {
         };
     }
 
-
     private void requireRole(
             IdentityGateway.Caller caller,
-            String requiredRole
+            String... allowedRoles
     ) {
 
         if (caller == null
-                || !requiredRole.equalsIgnoreCase(caller.role())) {
+                || caller.role() == null
+                || Arrays.stream(allowedRoles)
+                        .noneMatch(role -> role.equalsIgnoreCase(caller.role()))) {
 
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -399,7 +397,6 @@ public class ParcelService {
             );
         }
     }
-
 
     private void recordStatusChange(
             Parcel parcel,
@@ -415,5 +412,27 @@ public class ParcelService {
                         caller.role()
                 )
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<ParcelResponse> getAllParcelsForSync(IdentityGateway.Caller caller) {
+        return parcelRepository.findAll()
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    private MerchantGateway getMerchantGateway() {
+
+        MerchantGateway gateway = merchantGatewayProvider.getIfAvailable();
+
+        if (gateway == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Merchant Service is currently unavailable"
+            );
+        }
+
+        return gateway;
     }
 }

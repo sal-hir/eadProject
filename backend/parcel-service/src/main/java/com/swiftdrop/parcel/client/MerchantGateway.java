@@ -1,4 +1,3 @@
-
 package com.swiftdrop.parcel.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -11,6 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -18,6 +18,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
+@ConditionalOnProperty(name = "app.merchant-url", matchIfMissing = false)
 public class MerchantGateway {
 
     private final RestClient client;
@@ -26,10 +27,11 @@ public class MerchantGateway {
 
         URI uri = URI.create(url);
 
+        boolean isLocalOrInternal = Set.of("localhost", "127.0.0.1", "[::1]", "merchant-service").contains(uri.getHost())
+                || !uri.getHost().contains(".");
+
         if (!"https".equals(uri.getScheme())
-                && !("http".equals(uri.getScheme())
-                && Set.of("localhost", "127.0.0.1", "[::1]")
-                .contains(uri.getHost()))) {
+                && !("http".equals(uri.getScheme()) && isLocalOrInternal)) {
 
             throw new IllegalArgumentException(
                     "Merchant Service communication requires HTTPS outside localhost"

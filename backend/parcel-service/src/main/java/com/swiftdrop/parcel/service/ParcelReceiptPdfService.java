@@ -146,7 +146,7 @@ public class ParcelReceiptPdfService {
                 drawDivider(content, y);
                 y -= 30;
 
-                // changed Parcel and payment information
+                // Parcel and payment information
                 writeText(content, boldFont, 13, "PARCEL & PAYMENT DETAILS", x, y);
                 y -= 25;
 
@@ -163,7 +163,6 @@ public class ParcelReceiptPdfService {
                 y = writeField(content, boldFont, regularFont,
                         "Delivery Priority",
                         parcel.deliveryPriority() + " DELIVERY", x, y);
-
                 y = writeField(content, boldFont, regularFont,
                         "Estimated Delivery Fee",
                         "LKR " + parcel.estimatedFee(), x, y);

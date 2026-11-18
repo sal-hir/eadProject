@@ -58,6 +58,8 @@ export const CreateParcel = () => {
 
     const loadZones = async () => {
       try {
+        setLoadingZones(true);
+        setError('');
         const response = await parcelApi.get('/parcels/booking/zones');
 
         if (!active) return;

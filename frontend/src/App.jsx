@@ -35,7 +35,7 @@ import { Contact } from './pages/Contact';
 // Account
 import { AccountSettings } from './pages/AccountSettings';
 
-// Admin
+// Admin & Dispatcher
 import { AdminUsers } from './pages/AdminUsers';
 import { AdminMerchants } from './pages/AdminMerchants';
 import { AdminMerchantCredentials } from './pages/admin/AdminMerchantCredentials';
@@ -44,6 +44,7 @@ import AdminAnalytics from './pages/admin/AdminAnalytics';
 import PricingManagement from './pages/admin/PricingManagement';
 import ZoneManagement from './pages/admin/ZoneManagement';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
+import DispatcherDashboard from './pages/dispatcher/DispatcherDashboard';
 
 // Merchant
 import {
@@ -117,38 +118,6 @@ export const App = () => {
                     <Route path="/admin/merchants" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminMerchants /></ProtectedRoute>} />
                     <Route path="/admin/merchants/:merchantId/credentials" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminMerchantCredentials /></ProtectedRoute>} />
                     <Route path="/admin/merchants/:merchantId/oauth-clients" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminMerchantOAuthClients /></ProtectedRoute>} />
-                    <Route
-                      path="/admin"
-                      element={
-                        <ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}>
-                          <AdminDashboard />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/admin/analytics"
-                      element={
-                        <ProtectedRoute allowedRoles={['ADMIN']}>
-                          <AdminAnalytics />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/admin/pricing"
-                      element={
-                        <ProtectedRoute allowedRoles={['ADMIN']}>
-                          <PricingManagement />
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="/admin/zones"
-                      element={
-                        <ProtectedRoute allowedRoles={['ADMIN']}>
-                          <ZoneManagement />
-                        </ProtectedRoute>
-                      }
-                    />
 
                     {/* Merchant Routes */}
                     <Route path="/merchant/credentials" element={<ProtectedRoute allowedRoles={['MERCHANT']}><MerchantCredentials /></ProtectedRoute>} />
@@ -202,6 +171,47 @@ export const App = () => {
                       }
                     />
 
+                    {/* Admin / Dispatcher Routes */}
+                    <Route
+                      path="/admin"
+                      element={
+                        <ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}>
+                          <AdminDashboard />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/dispatcher/dashboard"
+                      element={
+                        <ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}>
+                          <DispatcherDashboard />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/analytics"
+                      element={
+                        <ProtectedRoute allowedRoles={['ADMIN']}>
+                          <AdminAnalytics />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/pricing"
+                      element={
+                        <ProtectedRoute allowedRoles={['ADMIN']}>
+                          <PricingManagement />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/admin/zones"
+                      element={
+                        <ProtectedRoute allowedRoles={['ADMIN']}>
+                          <ZoneManagement />
+                        </ProtectedRoute>
+                      }
+                    />
                     {/* Fallback */}
                     <Route path="*" element={<Navigate to="/" replace />} />
 

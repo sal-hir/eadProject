@@ -1,4 +1,3 @@
-
 package com.swiftdrop.parcel.dto;
 
 import java.math.BigDecimal;
@@ -19,11 +18,11 @@ public record ParcelResponse(
         Instant createdAt,
         BigDecimal estimatedFee,
         BigDecimal weightKg,
-        //added
         boolean fragile,
         String deliveryPriority,
         String senderName,
         String senderPhone,
         String receiverName,
         String receiverPhone,
-        String parcelDescription) {}
+        String parcelDescription
+) {}

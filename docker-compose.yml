@@ -27,6 +27,71 @@ services:
       retries: 10
     restart: unless-stopped
 
+  parcel-service:
+    build: ./backend/parcel-service
+    environment:
+      SPRING_DATASOURCE_URL: ${PARCEL_DB_URL:-${AUTH_DB_URL}}
+      SPRING_DATASOURCE_USERNAME: ${PARCEL_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
+      SPRING_DATASOURCE_PASSWORD: ${PARCEL_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-swiftdrop}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-swiftdrop_pass}
+      AUTH_SERVICE_URL: http://auth-service:4000
+      app.auth-url: http://auth-service:4000
+    ports:
+      - "4002:4002"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dispatch-service:
+    build: ./backend/dispatch-service
+    environment:
+      SPRING_DATASOURCE_URL: ${DISPATCH_DB_URL:-${AUTH_DB_URL}}
+      SPRING_DATASOURCE_USERNAME: ${DISPATCH_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
+      SPRING_DATASOURCE_PASSWORD: ${DISPATCH_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-swiftdrop}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-swiftdrop_pass}
+      COURIER_SERVICE_URL: http://courier-service:4003
+      PARCEL_SERVICE_URL: http://parcel-service:4002
+      AUTH_SERVICE_URL: http://auth-service:4000
+      JWT_SECRET: ${JWT_SECRET:?Set a random JWT_SECRET of at least 32 bytes}
+    ports:
+      - "${DISPATCH_SERVICE_PORT:-8080}:8080"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      parcel-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  admin-service:
+    build: ./backend/admin-service
+    environment:
+      DB_URL: ${ADMIN_DB_URL:-${AUTH_DB_URL}}
+      DB_MIGRATION_URL: ${ADMIN_DB_MIGRATION_URL:-${AUTH_DB_URL}}
+      DB_USERNAME: ${ADMIN_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
+      DB_PASSWORD: ${ADMIN_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
+      AUTH_SERVICE_URL: http://auth-service:4000
+      MERCHANT_SERVICE_URL: http://merchant-service:4001
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      MERCHANT_SERVICE_TOKEN: ${MERCHANT_SERVICE_TOKEN:?Set a random MERCHANT_SERVICE_TOKEN of at least 32 characters}
+      JWT_SECRET: ${JWT_SECRET:?Set a random JWT_SECRET of at least 32 bytes}
+    ports:
+      - "${ADMIN_SERVICE_PORT:-4009}:4009"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+
   merchant-service:
     build:
       context: .
@@ -64,6 +129,8 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:4000}
         VITE_MERCHANT_API_URL: ${VITE_MERCHANT_API_URL:-http://localhost:4001}
         VITE_COURIER_API_URL: ${VITE_COURIER_API_URL:-http://localhost:4003}
+        VITE_DISPATCH_API_URL: ${VITE_DISPATCH_API_URL:-http://localhost:8080}
+        VITE_ADMIN_API_URL: ${VITE_ADMIN_API_URL:-http://localhost:4009}
     ports:
       - "3000:80"
     depends_on:
