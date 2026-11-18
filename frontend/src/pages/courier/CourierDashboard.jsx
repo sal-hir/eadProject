@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
+import { courierApi } from '../../api/client';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Truck, CheckCircle2, Clock, AlertTriangle, Upload, Camera, RefreshCw, Check } from 'lucide-react';
 
@@ -22,7 +22,7 @@ export const CourierDashboard = () => {
   const fetchDeliveries = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/couriers/my-deliveries', {
+      const res = await courierApi.get('/couriers/my-deliveries', {
         params: { status: filterStatus || undefined },
       });
       if (res.data.success) {
@@ -43,7 +43,7 @@ export const CourierDashboard = () => {
   const toggleAvailability = async () => {
     if (!courier) return;
     try {
-      const res = await api.patch('/couriers/availability', {
+      const res = await courierApi.patch('/couriers/availability', {
         isAvailable: !courier.isAvailable,
       });
       if (res.data.success) {
@@ -83,7 +83,7 @@ export const CourierDashboard = () => {
     formData.append('image', file);
 
     try {
-      const res = await api.post('/uploads/proof', formData, {
+      const res = await courierApi.post('/uploads/proof', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       if (res.data.success) {
@@ -104,7 +104,7 @@ export const CourierDashboard = () => {
     setModalError('');
 
     try {
-      const res = await api.patch(`/parcels/${selectedParcel.id}/status`, {
+      const res = await courierApi.patch(`/parcels/${selectedParcel.id}/status`, {
         status: newStatus,
         note: note || undefined,
         proofImageUrl: proofUrl || undefined,

@@ -40,6 +40,11 @@ export function navigationFor(role) {
     ...(role === 'CUSTOMER'
       ? [
           {
+            to: '/courier',
+            label: 'Courier Board',
+            icon: Truck,
+          },
+          {
             to: '/merchant/apply',
             label: 'Become a Merchant',
             icon: Store,

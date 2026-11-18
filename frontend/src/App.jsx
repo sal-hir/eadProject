@@ -125,7 +125,7 @@ export const App = () => {
                     <Route
                       path="/courier"
                       element={
-                        <ProtectedRoute allowedRoles={['COURIER', 'ADMIN']}>
+                        <ProtectedRoute allowedRoles={['COURIER', 'ADMIN', 'CUSTOMER']}>
                           <CourierDashboard />
                         </ProtectedRoute>
                       }
