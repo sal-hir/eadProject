@@ -5,18 +5,18 @@ spring:
   application:
     name: tracking-service
   config:
-    import: "optional:file:./.env[.properties]"
+    import: "optional:file:./.env[.properties],optional:file:../../.env[.properties]"
   datasource:
-    url: ${spring.datasource.url:${TRACKING_DB_URL:${AUTH_DB_URL:jdbc:postgresql://localhost:5432/neondb}}}
-    username: ${spring.datasource.username:${TRACKING_DB_USER:${AUTH_DB_USER:neondb_owner}}}
-    password: ${spring.datasource.password:${TRACKING_DB_PASSWORD:${AUTH_DB_PASSWORD:}}}
+    url: ${AUTH_DB_URL:${spring.datasource.url:${TRACKING_DB_URL:jdbc:postgresql://localhost:5432/neondb}}}
+    username: ${AUTH_DB_USER:${spring.datasource.username:${TRACKING_DB_USER:neondb_owner}}}
+    password: ${AUTH_DB_PASSWORD:${spring.datasource.password:${TRACKING_DB_PASSWORD:}}}
     hikari:
       maximum-pool-size: ${TRACKING_DB_POOL_SIZE:3}
       minimum-idle: 0
   flyway:
-    url: ${spring.flyway.url:${TRACKING_MIGRATION_DB_URL:${spring.datasource.url}}}
-    user: ${spring.datasource.username}
-    password: ${spring.datasource.password}
+    url: ${AUTH_MIGRATION_DB_URL:${spring.flyway.url:${TRACKING_MIGRATION_DB_URL:${spring.datasource.url}}}}
+    user: ${AUTH_DB_USER:${spring.flyway.user:${spring.datasource.username}}}
+    password: ${AUTH_DB_PASSWORD:${spring.flyway.password:${spring.datasource.password}}}
     schemas: tracking
     default-schema: tracking
     create-schemas: true
