@@ -11,3 +11,13 @@ data:
   COOKIE_SECURE: "true"
   JWT_ISSUER: swiftdrop-auth
   JWT_TTL_SECONDS: "900"
+  MERCHANT_SERVICE_URL: http://merchant-service:4001
+  COURIER_SERVICE_URL: http://courier-service:4003
+  TRACKING_SERVICE_URL: http://tracking-service:4004
+  NOTIFICATION_SERVICE_URL: http://notification-service:4005
+  # Optional password-recovery SMTP. Fill these when enabling recovery email.
+  MAIL_HOST: ""
+  MAIL_PORT: "587"
+  MAIL_FROM: ""
+  MAIL_SMTP_AUTH: "true"
+  MAIL_SMTP_STARTTLS: "true"

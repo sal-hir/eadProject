@@ -9,6 +9,7 @@ vi.mock('./api/client', async (original) => ({
   ...await original(),
   api: { get: vi.fn(), post: vi.fn() },
   merchantApi: { get: vi.fn().mockRejectedValue({ response: { status: 404 } }), post: vi.fn(), put: vi.fn() },
+  adminApi: { get: vi.fn().mockRejectedValue({ response: { status: 404 } }), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
   setAccessToken: vi.fn(),
   sessionRequest: vi.fn(), refreshSession: vi.fn(), setSessionRefresher: vi.fn(() => () => {}),
 }));
