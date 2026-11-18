@@ -4,6 +4,6 @@ import java.time.LocalDate;
 
 public record DailyDeliveryAnalyticsResponse(
         LocalDate date,
-        long totalDeliveries
+        long deliveries
 ) {
 }

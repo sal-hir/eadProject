@@ -29,7 +29,7 @@ public class IdentityFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String path = request.getRequestURI();
-        if (path.startsWith("/actuator/health") || path.startsWith("/uploads/") || "OPTIONS".equalsIgnoreCase(request.getMethod())) {
+        if (path.equals("/api/v1/info") || path.startsWith("/actuator/health") || path.startsWith("/uploads/") || path.startsWith("/v3/api-docs") || path.startsWith("/swagger-ui") || path.equals("/swagger-ui.html") || "OPTIONS".equalsIgnoreCase(request.getMethod())) {
             chain.doFilter(request, response);
             return;
         }

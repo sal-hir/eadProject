@@ -12,9 +12,9 @@ import {
   Search,
   PlusCircle,
   ChevronRight,
-  MapPin,
+  MapPinned,
   DollarSign,
-  BarChart3
+  ChartNoAxesCombined,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button, Modal } from '../components/ui';
@@ -25,42 +25,119 @@ const dashboards = { CUSTOMER: '/customer', MERCHANT: '/merchant', COURIER: '/co
 
 export function navigationFor(role) {
   if (!dashboards[role]) return [];
+
   return [
-    { to: dashboards[role], label: 'Dashboard', icon: LayoutDashboard, end: true },
-    ...(role === 'CUSTOMER' ? [{ to: '/merchant/apply', label: 'Become a Merchant', icon: Store }, { to: '/customer/new', label: 'New Delivery', icon: PlusCircle }] : []),
-    ...(['CUSTOMER', 'MERCHANT'].includes(role) ? [{ to: '/merchant/application-status', label: 'Business application', icon: ClipboardList }] : []),
-    ...(['ADMIN', 'DISPATCHER'].includes(role) ? [{ to: '/dispatcher/dashboard', label: 'Dispatch', icon: Truck }] : []),
-    ...(role === 'ADMIN' ? [
-      { to: '/admin/merchants', label: 'Merchant applications', icon: Store },
-      { to: '/admin/users', label: 'User accounts', icon: Users },
-      { to: '/admin/zones', label: 'Zone Management', icon: MapPin },
-      { to: '/admin/pricing', label: 'Pricing Management', icon: DollarSign },
-      
-    ] : []),
-    { to: '/account', label: 'Account', icon: UserRound },
+    {
+      to: dashboards[role],
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      end: true,
+    },
+
+    // Customer Navigation
+    ...(role === 'CUSTOMER'
+      ? [
+          {
+            to: '/merchant/apply',
+            label: 'Become a Merchant',
+            icon: Store,
+          },
+          {
+            to: '/customer/new',
+            label: 'New Delivery',
+            icon: PlusCircle,
+          },
+        ]
+      : []),
+
+    // Customer and Merchant Navigation
+    ...(['CUSTOMER', 'MERCHANT'].includes(role)
+      ? [
+          {
+            to: '/merchant/application-status',
+            label: 'Business application',
+            icon: ClipboardList,
+          },
+        ]
+      : []),
+
+    // Admin Navigation
+    ...(role === 'ADMIN'
+      ? [
+          {
+            to: '/admin/merchants',
+            label: 'Merchant applications',
+            icon: Store,
+          },
+          {
+            to: '/admin/users',
+            label: 'User accounts',
+            icon: Users,
+          },
+          {
+            to: '/admin/zones',
+            label: 'Zone Management',
+            icon: MapPinned,
+          },
+          {
+            to: '/admin/pricing',
+            label: 'Pricing Management',
+            icon: DollarSign,
+          },
+          {
+            to: '/admin/analytics',
+            label: ' Analytics',
+            icon: ChartNoAxesCombined,
+          },
+          {
+            to: '/dispatcher/dashboard',
+            label: 'Dispatch',
+            icon: Truck,
+          },
+        ]
+      : []),
+
+    // Dispatcher Navigation
+    ...(role === 'DISPATCHER'
+      ? [
+          {
+            to: '/dispatcher/dashboard',
+            label: 'Dispatch',
+            icon: Truck,
+          },
+          {
+            to: '/admin/analytics',
+            label: 'Management Analytics',
+            icon: ChartNoAxesCombined,
+          },
+        ]
+      : []),
+
+    // Common Navigation
+    {
+      to: '/account',
+      label: 'Account',
+      icon: UserRound,
+    },
   ];
 }
 
 export function Brand({ dark = false, compact = false }) {
   return <Link to="/" aria-label="SwiftDrop home" className="flex min-w-0 items-center gap-2.5"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm"><Truck size={23} aria-hidden="true" /></span><span className={`whitespace-nowrap text-xl font-extrabold tracking-tight ${compact ? 'hidden sm:inline' : ''} ${dark ? 'text-white' : 'text-slate-900'}`}>Swift<span className={dark ? 'text-blue-300' : 'text-blue-600'}>Drop</span></span></Link>;
 }
-
 function NavigationLinks({ role, onNavigate, dark = false }) {
   return <nav aria-label="Portal navigation" className="space-y-1">{navigationFor(role).map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} onClick={onNavigate}
     className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${isActive ? (dark ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700') : (dark ? 'text-slate-300 hover:bg-slate-800 hover:text-white' : 'text-slate-700 hover:bg-slate-100')}`}><Icon size={18} aria-hidden="true" /><span>{label}</span></NavLink>)}</nav>;
 }
-
 export function Sidebar({ role }) {
   return <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col bg-slate-900 p-5 lg:flex"><Brand dark /><p className="mb-5 mt-8 px-3 text-xs font-semibold uppercase tracking-widest text-slate-400">{roleLabels[role]} portal</p><NavigationLinks role={role} dark /><p className="mt-auto px-3 pt-8 text-xs leading-5 text-slate-400">SwiftDrop<br />Enterprise Courier</p></aside>;
 }
-
 export function MobileNavigation({ open, onClose, role, publicPage = false }) {
   return <Modal open={open} onClose={onClose} title={role ? `${roleLabels[role]} navigation` : 'Navigation'} className="fixed inset-y-0 left-0 max-h-dvh max-w-xs rounded-none p-5">
     {(!role || publicPage) && <nav aria-label="Public navigation" className="mb-4 flex flex-col gap-2">{[...publicLinks, ...(!role ? [['/login', 'Log in'], ['/register', 'Register']] : [])].map(([to, label]) => <Link key={to} to={to} className="ui-button ui-button-ghost justify-start" onClick={onClose}>{label}</Link>)}</nav>}
     {role && <NavigationLinks role={role} onNavigate={onClose} />}
   </Modal>;
 }
-
 export function TopNavbar({ portal = false }) {
   const { user, isAuthenticated, logout } = useAuth(); const navigate = useNavigate(); const { pathname } = useLocation();
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -83,53 +160,45 @@ export function TopNavbar({ portal = false }) {
     </div>
   </div>{error && <p role="alert" className="px-4 pb-3 text-sm text-rose-700">{error}</p>}</header><MobileNavigation open={open} onClose={() => setOpen(false)} role={isAuthenticated ? user?.role : null} publicPage={!portal} /></>;
 }
-
 const routeNames = {
   customer: 'Customer',
   merchant: 'Merchant',
   courier: 'Courier',
   admin: 'Administration',
-  dispatcher: 'Dispatch',
-  dashboard: 'Dashboard',
   account: 'Account',
   users: 'User accounts',
   merchants: 'Merchant applications',
-  zones: 'Zone Management',
-  pricing: 'Pricing Management',
-  analytics: 'Management Analytics',
   apply: 'Business application',
   'application-status': 'Application status',
   new: 'New delivery',
-  parcels: 'Parcel details'
-};
+  parcels: 'Parcel details',
 
+  // New Management Pages
+  zones: 'Zone Management',
+  pricing: 'Pricing Management',
+  analytics: 'Management Analytics',
+};
 export function Breadcrumbs() {
   const { pathname } = useLocation(); const parts = pathname.split('/').filter(Boolean);
   return <nav aria-label="Breadcrumb" className="px-4 pt-5 sm:px-6 lg:px-8"><ol className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><li><Link to="/" className="hover:text-blue-700">Home</Link></li>{parts.map((part, i) => <li key={i} className="flex min-w-0 items-center gap-2"><ChevronRight size={12} aria-hidden="true" /><span aria-current={i === parts.length - 1 ? 'page' : undefined}>{routeNames[part] || 'Details'}</span></li>)}</ol></nav>;
 }
-
 const SkipLink = () => <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[110] focus:rounded-lg focus:bg-white focus:p-3 focus:text-blue-700 focus:shadow-lg">Skip to content</a>;
-
 export function PublicLayout({ children }) {
   return <div className="min-h-dvh bg-slate-50 text-slate-900"><SkipLink /><TopNavbar /><main id="main-content" tabIndex={-1}>{children}</main><PublicFooter /></div>;
 }
-
 export function AuthLayout({ children }) {
   return <PublicLayout><div className="auth-content mx-auto w-full max-w-5xl px-4 py-1 sm:px-6">{children}</div></PublicLayout>;
 }
-
 export function PortalLayout({ children }) {
   const { user } = useAuth();
   return <div className="min-h-dvh bg-slate-50 text-slate-900"><SkipLink /><Sidebar role={user?.role} /><div className="min-w-0 lg:pl-64"><TopNavbar portal /><Breadcrumbs /><main id="main-content" tabIndex={-1} className="portal-content mx-auto w-full max-w-screen-2xl pb-10">{children}</main></div></div>;
 }
-
 // Named portal boundaries share one shell and derive navigation from AuthContext.
 export const CustomerLayout = PortalLayout;
 export const MerchantLayout = PortalLayout;
 export const CourierLayout = PortalLayout;
 export const DispatcherLayout = PortalLayout;
 export const AdminLayout = PortalLayout;
-
 export function ApplicationLayout({ children }) {
   const { pathname, hash } = useLocation(); const { user, isAuthenticated } = useAuth();
   useEffect(() => {
@@ -140,7 +209,7 @@ export function ApplicationLayout({ children }) {
     else { document.documentElement.scrollTop = 0; document.body.scrollTop = 0; }
   }, [pathname, hash]);
   if (['/login', '/register', '/forgot-password', '/reset-password', '/activate', '/auth/callback'].includes(pathname)) return <AuthLayout>{children}</AuthLayout>;
-  if (isAuthenticated && /^\/(customer|merchant|courier|admin|dispatcher|account|parcels)(\/|$)/.test(pathname)) {
+  if (isAuthenticated && /^\/(customer|merchant|courier|admin|account|parcels)(\/|$)/.test(pathname)) {
     const Layout = { CUSTOMER: CustomerLayout, MERCHANT: MerchantLayout, COURIER: CourierLayout, DISPATCHER: DispatcherLayout, ADMIN: AdminLayout }[user?.role] || PortalLayout;
     return <Layout>{children}</Layout>;
   }

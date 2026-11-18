@@ -17,6 +17,10 @@ public class SessionCsrfFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         if ("POST".equals(request.getMethod()) && Set.of("/api/v1/auth/login", "/api/v1/auth/oauth/exchange", "/api/v1/auth/refresh", "/api/v1/auth/logout").contains(path)) {
             String origin = request.getHeader("Origin");
+            boolean isSwagger = "http://localhost:4000".equals(origin) || "http://127.0.0.1:4000".equals(origin);
+            if (isSwagger && !path.endsWith("/refresh") && !path.endsWith("/logout") && request.getHeader(SessionCookies.CSRF_HEADER) == null) {
+                chain.doFilter(request, response); return;
+            }
             boolean cookieOperation = path.endsWith("/refresh") || path.endsWith("/logout") || origin != null || request.getHeader(SessionCookies.CSRF_HEADER) != null;
             if (cookieOperation && (!"1".equals(request.getHeader(SessionCookies.CSRF_HEADER)) || (origin != null && !frontend.equals(origin)))) {
                 ApiErrors.write(mapper, response, 403, "Invalid session request origin or CSRF header"); return;

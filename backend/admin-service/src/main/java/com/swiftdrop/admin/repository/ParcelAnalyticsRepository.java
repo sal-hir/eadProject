@@ -1,9 +1,7 @@
 package com.swiftdrop.admin.repository;
 
-
-
-
 import com.swiftdrop.admin.entity.ParcelAnalytics;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,8 +16,7 @@ public interface ParcelAnalyticsRepository
     long countByCurrentStatusIgnoreCase(String status);
 
     @Query(value = """
-        SELECT current_status AS status,
-               COUNT(*) AS total
+        SELECT current_status, COUNT(*)
         FROM parcel_analytics
         GROUP BY current_status
         ORDER BY current_status

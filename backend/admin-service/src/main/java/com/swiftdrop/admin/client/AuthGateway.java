@@ -18,73 +18,79 @@ import org.springframework.web.client.RestClientResponseException;
 @Component
 public class AuthGateway implements IdentityGateway {
 
-        private final RestClient client;
+    private final RestClient client;
 
-        public AuthGateway(
-                        @Value("${app.auth-url}") String url) {
+    public AuthGateway(
+            @Value("${app.auth-url}") String url
+    ) {
 
-                URI uri = URI.create(url);
+        URI uri = URI.create(url);
 
-                // Require HTTPS outside localhost
-                if (!"https".equals(uri.getScheme())
-                                && !("http".equals(uri.getScheme())
-                                                && Set.of("localhost", "127.0.0.1", "[::1]", "auth-service")
-                                                                .contains(uri.getHost()))) {
+        // Require HTTPS outside localhost
+        if (!"https".equals(uri.getScheme())
+                && !("http".equals(uri.getScheme())
+                && Set.of("localhost", "127.0.0.1", "[::1]")
+                .contains(uri.getHost()))) {
 
-                        throw new IllegalArgumentException(
-                                        "Auth Service communication requires HTTPS outside localhost");
-                }
-
-                var factory = new SimpleClientHttpRequestFactory();
-                factory.setConnectTimeout(Duration.ofSeconds(3));
-                factory.setReadTimeout(Duration.ofSeconds(8));
-
-                this.client = RestClient.builder()
-                                .baseUrl(url)
-                                .requestFactory(factory)
-                                .build();
+            throw new IllegalArgumentException(
+                    "Auth Service communication requires HTTPS outside localhost"
+            );
         }
 
-        // Validate JWT token using Auth Service
-        @Override
-        public Caller validate(String token) {
+        var factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(3));
+        factory.setReadTimeout(Duration.ofSeconds(8));
 
-                try {
+        this.client = RestClient.builder()
+                .baseUrl(url)
+                .requestFactory(factory)
+                .build();
+    }
 
-                        JsonNode body = client.get()
-                                        .uri("/api/v1/auth/me")
-                                        .headers(headers -> headers.setBearerAuth(token))
-                                        .retrieve()
-                                        .body(JsonNode.class);
+    // Validate JWT token using Auth Service
+    @Override
+    public Caller validate(String token) {
 
-                        JsonNode profile = body == null
-                                        ? null
-                                        : body.path("data");
+        try {
 
-                        if (profile == null
-                                        || !body.path("success").asBoolean()
-                                        || !profile.path("active").asBoolean()) {
+            JsonNode body = client.get()
+                    .uri("/api/v1/auth/me")
+                    .headers(headers -> headers.setBearerAuth(token))
+                    .retrieve()
+                    .body(JsonNode.class);
 
-                                throw new ApiFailure(
-                                                401,
-                                                "Identity unavailable");
-                        }
+            JsonNode profile = body == null
+                    ? null
+                    : body.path("data");
 
-                        return new Caller(
-                                        UUID.fromString(profile.path("id").asText()),
-                                        profile.path("role").asText());
+            if (profile == null
+                    || !body.path("success").asBoolean()
+                    || !profile.path("active").asBoolean()) {
 
-                } catch (RestClientResponseException e) {
+                throw new ApiFailure(
+                        401,
+                        "Identity unavailable"
+                );
+            }
 
-                        throw new ApiFailure(
-                                        e.getStatusCode().value() == 401 ? 401 : 503,
-                                        "Authentication unavailable");
+            return new Caller(
+                    UUID.fromString(profile.path("id").asText()),
+                    profile.path("role").asText()
+            );
 
-                } catch (RestClientException | IllegalArgumentException e) {
+        } catch (RestClientResponseException e) {
 
-                        throw new ApiFailure(
-                                        503,
-                                        "Authentication unavailable");
-                }
+            throw new ApiFailure(
+                    e.getStatusCode().value() == 401 ? 401 : 503,
+                    "Authentication unavailable"
+            );
+
+        } catch (RestClientException | IllegalArgumentException e) {
+
+            throw new ApiFailure(
+                    503,
+                    "Authentication unavailable"
+            );
         }
+    }
 }

@@ -3,10 +3,13 @@ package com.swiftdrop.admin.service;
 
 import com.swiftdrop.admin.dto.*;
 import com.swiftdrop.admin.entity.Zone;
+import com.swiftdrop.admin.messaging.ZoneEventPublisher;
 import com.swiftdrop.admin.repository.ZoneRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
@@ -18,10 +21,17 @@ import java.util.UUID;
 public class ZoneService {
 
     private final ZoneRepository repository;
+    private final ZoneEventPublisher zoneEventPublisher;
 
-    public ZoneService(ZoneRepository repository) {
+    // Constructor injection
+    public ZoneService(
+            ZoneRepository repository,
+            ZoneEventPublisher zoneEventPublisher
+    ) {
         this.repository = repository;
+        this.zoneEventPublisher = zoneEventPublisher;
     }
+
 
     // Create a new zone
     public ZoneResponse create(CreateZoneRequest request) {
@@ -47,8 +57,14 @@ public class ZoneService {
 
         Zone saved = repository.save(zone);
 
+        // Publish CREATED event to RabbitMQ after database commit
+        publishAfterCommit(() ->
+                zoneEventPublisher.publishZone("CREATED", saved)
+        );
+
         return toResponse(saved);
     }
+
 
     // Get all zones
     @Transactional(readOnly = true)
@@ -60,6 +76,7 @@ public class ZoneService {
                 .toList();
     }
 
+
     // Get zone by ID
     @Transactional(readOnly = true)
     public ZoneResponse getById(UUID id) {
@@ -68,6 +85,7 @@ public class ZoneService {
 
         return toResponse(zone);
     }
+
 
     // Update zone
     public ZoneResponse update(
@@ -100,16 +118,33 @@ public class ZoneService {
         zone.setLongitude(request.longitude());
         zone.setRadiusKm(request.radiusKm());
 
-        return toResponse(repository.save(zone));
+        Zone updated = repository.save(zone);
+
+        // Publish UPDATED event to RabbitMQ after database commit
+        publishAfterCommit(() ->
+                zoneEventPublisher.publishZone("UPDATED", updated)
+        );
+
+        return toResponse(updated);
     }
+
 
     // Delete zone
     public void delete(UUID id) {
 
         Zone zone = findZone(id);
 
-        repository.delete(zone);
+        // Soft delete to preserve existing pricing references
+        zone.setActive(false);
+
+        repository.save(zone);
+
+        // Publish DELETED event to RabbitMQ after database commit
+        publishAfterCommit(() ->
+                zoneEventPublisher.publishZoneDeleted(id)
+        );
     }
+
 
     // Find zone
     private Zone findZone(UUID id) {
@@ -122,6 +157,29 @@ public class ZoneService {
                         )
                 );
     }
+
+
+    // Publish RabbitMQ event only after successful database commit
+    private void publishAfterCommit(Runnable eventPublisher) {
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+
+                        @Override
+                        public void afterCommit() {
+                            eventPublisher.run();
+                        }
+                    }
+            );
+
+        } else {
+
+            eventPublisher.run();
+        }
+    }
+
 
     // Convert entity to response DTO
     private ZoneResponse toResponse(Zone zone) {

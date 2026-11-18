@@ -1,25 +1,24 @@
 services:
-  
   auth-service:
     build: ./backend/auth-service
-    image: swiftdrop-auth-service
-    container_name: swiftdrop-auth-service
-
     environment:
-      AUTH_DB_URL: ${AUTH_DB_URL}
-      AUTH_MIGRATION_DB_URL: ${AUTH_MIGRATION_DB_URL}
-      AUTH_DB_USER: ${AUTH_DB_USER}
-      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
+      AUTH_DB_URL: ${AUTH_DB_URL:?Set the Neon JDBC URL in .env}
+      AUTH_MIGRATION_DB_URL: ${AUTH_MIGRATION_DB_URL:?Set the direct Neon JDBC URL in .env}
+      AUTH_DB_USER: ${AUTH_DB_USER:-swiftdrop}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set a random JWT_SECRET of at least 32 bytes}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:4000/login/oauth2/code/google}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      MERCHANT_SERVICE_URL: ${MERCHANT_SERVICE_URL:-http://merchant-service:4001}
+      COURIER_SERVICE_URL: ${COURIER_SERVICE_URL:-http://courier-service:4003}
+      TRACKING_SERVICE_URL: ${TRACKING_SERVICE_URL:-http://tracking-service:4004}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:4005}
+      MERCHANT_SERVICE_TOKEN: ${MERCHANT_SERVICE_TOKEN:?Set a random MERCHANT_SERVICE_TOKEN of at least 32 characters}
     ports:
       - "4000:4000"
-    networks:
-      - swiftdrop-network
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:4000/actuator/health/readiness"]
       interval: 10s
@@ -28,128 +27,43 @@ services:
       retries: 10
     restart: unless-stopped
 
-
-
-    # ==========================================
-  # PARCEL SERVICE (NEW ADDED)
-  # ==========================================
   parcel-service:
     build: ./backend/parcel-service
-    image: swiftdrop-parcel-service
-    container_name: swiftdrop-parcel-service
-    restart: unless-stopped
-    ports:
-      - "4002:4002"
     environment:
-      SPRING_DATASOURCE_URL: ${PARCEL_DB_URL}
-      SPRING_DATASOURCE_USERNAME: ${PARCEL_DB_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${PARCEL_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${PARCEL_DB_URL:-${AUTH_DB_URL}}
+      SPRING_DATASOURCE_USERNAME: ${PARCEL_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
+      SPRING_DATASOURCE_PASSWORD: ${PARCEL_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-swiftdrop}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-swiftdrop_pass}
       AUTH_SERVICE_URL: http://auth-service:4000
       app.auth-url: http://auth-service:4000
-    networks:
-      - swiftdrop-network
+    ports:
+      - "4002:4002"
     depends_on:
       auth-service:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-
-# ==========================================
-  # COURIER SERVICE
-  # ==========================================
-  courier-service:
-    build:
-      context: ./backend/courier-service
-      dockerfile: Dockerfile
-    image: swiftdrop-courier-service
-    container_name: swiftdrop-courier-service
     restart: unless-stopped
-    ports:
-      - "${COURIER_PORT:-4003}:4003"
-    extra_hosts:
-      - "localhost:host-gateway"
-    environment:
-      COURIER_PORT: 4003
-      COURIER_DB_URL: ${COURIER_DB_URL}
-      COURIER_DB_USER: ${COURIER_DB_USER}
-      COURIER_DB_PASSWORD: ${COURIER_DB_PASSWORD}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      AUTH_SERVICE_URL: http://auth-service:4000
-      UPLOAD_DIR: /app/uploads
-    volumes:
-      - courier_uploads:/app/uploads
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4003/actuator/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-      
-    # ==========================================
-  # MEMBER 8: ADMIN SERVICE (ADDED)
-  # ==========================================
-  admin-service:
-    build: ./backend/admin-service
-    image: swiftdrop-admin-service
-    container_name: swiftdrop-admin-service
-    restart: unless-stopped
-    ports:
-      - "${ADMIN_SERVICE_PORT:-4009}:4009"
-    extra_hosts:
-      - "localhost:host-gateway"
-    environment:
-      DB_URL: ${ADMIN_DB_URL}
-      DB_MIGRATION_URL: ${ADMIN_DB_MIGRATION_URL}
-      DB_USERNAME: ${ADMIN_DB_USERNAME}
-      DB_PASSWORD: ${ADMIN_DB_PASSWORD}
-      AUTH_SERVICE_URL: http://auth-service:4000
-      MERCHANT_SERVICE_URL: ${MERCHANT_SERVICE_URL:-http://localhost:4001}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      MERCHANT_SERVICE_TOKEN: ${MERCHANT_SERVICE_TOKEN}
-      JWT_SECRET: ${JWT_SECRET}
-    depends_on:
-      auth-service:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:4009/actuator/health/readiness || exit 1"]
-      interval: 10s
-      timeout: 5s
-      start_period: 40s
-      retries: 10
-    networks:
-      - swiftdrop-network
 
-  # ==========================================
-  # MEMBER 7: DISPATCH SERVICE (IMAGE FIXED)
-  # ==========================================
   dispatch-service:
     build: ./backend/dispatch-service
-    image: swiftdrop-dispatch-service
-    container_name: swiftdrop-dispatch-service
-    restart: unless-stopped
-    ports:
-      - "${DISPATCH_SERVICE_PORT:-8080}:8080"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     environment:
-      SPRING_DATASOURCE_URL: ${DISPATCH_DB_URL}
-      SPRING_DATASOURCE_USERNAME: ${DISPATCH_DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${DISPATCH_DB_PASSWORD}
+      SPRING_DATASOURCE_URL: ${DISPATCH_DB_URL:-${AUTH_DB_URL}}
+      SPRING_DATASOURCE_USERNAME: ${DISPATCH_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
+      SPRING_DATASOURCE_PASSWORD: ${DISPATCH_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: 5672
-      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
-      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-guest}
-      # ... existing env vars ...
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-swiftdrop}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASS:-swiftdrop_pass}
       COURIER_SERVICE_URL: http://courier-service:4003
       PARCEL_SERVICE_URL: http://parcel-service:4002
       AUTH_SERVICE_URL: http://auth-service:4000
-      JWT_SECRET: ${JWT_SECRET}
-    networks:
-      - swiftdrop-network
+      JWT_SECRET: ${JWT_SECRET:?Set a random JWT_SECRET of at least 32 bytes}
+    ports:
+      - "${DISPATCH_SERVICE_PORT:-8080}:8080"
     depends_on:
       auth-service:
         condition: service_healthy
@@ -157,84 +71,159 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
-        
-
-  # ==========================================
-  # LOCAL POSTGRES DATABASE
-  # ==========================================
-  postgres:
-    image: postgres:15-alpine
-    container_name: swiftdrop-postgres
     restart: unless-stopped
+
+  admin-service:
+    build: ./backend/admin-service
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-swiftdrop_db}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_URL: ${ADMIN_DB_URL:-${AUTH_DB_URL}}
+      DB_MIGRATION_URL: ${ADMIN_DB_MIGRATION_URL:-${AUTH_DB_URL}}
+      DB_USERNAME: ${ADMIN_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
+      DB_PASSWORD: ${ADMIN_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
+      AUTH_SERVICE_URL: http://auth-service:4000
+      MERCHANT_SERVICE_URL: http://merchant-service:4001
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      MERCHANT_SERVICE_TOKEN: ${MERCHANT_SERVICE_TOKEN:?Set a random MERCHANT_SERVICE_TOKEN of at least 32 characters}
+      JWT_SECRET: ${JWT_SECRET:?Set a random JWT_SECRET of at least 32 bytes}
     ports:
-      - "${POSTGRES_PORT:-8090}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - "${ADMIN_SERVICE_PORT:-4009}:4009"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  merchant-service:
+    build:
+      context: .
+      dockerfile: backend/merchant-service/Dockerfile
+    environment:
+      MERCHANT_PORT: 4001
+      MERCHANT_DB_URL: ${MERCHANT_DB_URL:-${AUTH_DB_URL}}
+      MERCHANT_MIGRATION_DB_URL: ${MERCHANT_MIGRATION_DB_URL:-${AUTH_MIGRATION_DB_URL}}
+      MERCHANT_DB_USER: ${MERCHANT_DB_USER:-${AUTH_DB_USER}}
+      MERCHANT_DB_PASSWORD: ${MERCHANT_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
+      AUTH_SERVICE_URL: http://auth-service:4000
+      AUTH_ALLOW_DOCKER_HTTP: "true"
+      MERCHANT_OAUTH_TOKEN_TTL_SECONDS: ${MERCHANT_OAUTH_TOKEN_TTL_SECONDS:-900}
+      WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:-}
+      WEBHOOK_WORKER_ENABLED: ${WEBHOOK_WORKER_ENABLED:-true}
+      MERCHANT_SERVICE_TOKEN: ${MERCHANT_SERVICE_TOKEN:?Set a random MERCHANT_SERVICE_TOKEN of at least 32 characters}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    ports:
+      - "4001:4001"
+    depends_on:
+      auth-service:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-swiftdrop_db}"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4001/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      start_period: 40s
+      retries: 10
+    restart: unless-stopped
 
-  # ==========================================
-  # FRONTEND (IMAGE FIXED)
-  # ==========================================
   frontend:
     build:
       context: ./frontend
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:4000}
+        VITE_MERCHANT_API_URL: ${VITE_MERCHANT_API_URL:-http://localhost:4001}
+        VITE_COURIER_API_URL: ${VITE_COURIER_API_URL:-http://localhost:4003}
+        VITE_DISPATCH_API_URL: ${VITE_DISPATCH_API_URL:-http://localhost:8080}
         VITE_ADMIN_API_URL: ${VITE_ADMIN_API_URL:-http://localhost:4009}
-    image: swiftdrop-frontend
-    container_name: swiftdrop-frontend
     ports:
       - "3000:80"
     depends_on:
       auth-service:
         condition: service_healthy
-      dispatch-service:
-        condition: service_started
-      admin-service:
+    restart: unless-stopped
+
+  courier-service:
+    build: ./backend/courier-service
+    environment:
+      COURIER_PORT: 4003
+      COURIER_DB_URL: ${COURIER_DB_URL:-${AUTH_DB_URL}}
+      COURIER_MIGRATION_DB_URL: ${COURIER_MIGRATION_DB_URL:-${AUTH_MIGRATION_DB_URL}}
+      COURIER_DB_USER: ${COURIER_DB_USER:-${AUTH_DB_USER}}
+      COURIER_DB_PASSWORD: ${COURIER_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
+      AUTH_SERVICE_URL: http://auth-service:4000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      UPLOAD_DIR: /app/uploads
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-swiftdrop}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-swiftdrop_pass}
+    ports:
+      - "4003:4003"
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:4003/actuator/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 10
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 
-    
-
-  # ==========================================
-  # RABBITMQ
-  # ==========================================
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: swiftdrop-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-swiftdrop}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-swiftdrop_pass}
+      RABBITMQ_DEFAULT_USER: swiftdrop
+      RABBITMQ_DEFAULT_PASS: swiftdrop_pass
     ports:
       - "5672:5672"
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      - ./infrastructure/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infrastructure/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
       interval: 10s
       timeout: 5s
+      start_period: 25s
       retries: 5
-    networks:
-      - swiftdrop-network
+    restart: unless-stopped
 
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025" # SMTP port
+      - "8025:8025" # Web UI port
+    restart: unless-stopped
+
+  notification-service:
+    build: ./backend/notification-service
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-swiftdrop}:${RABBITMQ_PASS:-swiftdrop_pass}@rabbitmq:5672
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      SMTP_SECURE: "false"
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      PORT: 4005
+    ports:
+      - "4005:4005"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4005/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
+  # Old data volumes remain declared and are never migrated or deleted.
   postgres_data:
   rabbitmq_data:
   uploads_data:
   auth_postgres_data:
-  courier_uploads:
-    driver: local
-
-networks:
-  swiftdrop-network:
-    driver: bridge

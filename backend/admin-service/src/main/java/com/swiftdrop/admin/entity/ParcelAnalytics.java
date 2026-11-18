@@ -1,4 +1,3 @@
-
 package com.swiftdrop.admin.entity;
 
 import jakarta.persistence.*;

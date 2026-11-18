@@ -10,10 +10,22 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 10MB
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:swiftdrop}
+    password: ${RABBITMQ_PASS:swiftdrop_pass}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    listener:
+      simple:
+        retry:
+          enabled: true
+          initial-interval: 2000ms
+          max-attempts: 3
   datasource:
-    url: ${COURIER_DB_URL:jdbc:postgresql://ep-billowing-wind-bd89juto-pooler.c-8.us-east-2.aws.neon.tech/swiftdrop-courier-db?user=swiftdrop-courier-db_owner&password=npg_TKHAdJo73tPZ&sslmode=require&channelBinding=require}
-    username: ${COURIER_DB_USER:swiftdrop-courier-db_owner}
-    password: ${COURIER_DB_PASSWORD:npg_TKHAdJo73tPZ}
+    url: ${COURIER_DB_URL:jdbc:postgresql://localhost:5432/swiftdrop_courier}
+    username: ${COURIER_DB_USER:swiftdrop}
+    password: ${COURIER_DB_PASSWORD:}
     hikari:
       maximum-pool-size: ${COURIER_DB_POOL_SIZE:3}
       minimum-idle: 0
@@ -51,3 +63,13 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   auth-url: ${AUTH_SERVICE_URL:http://localhost:4000}
   upload-dir: ${UPLOAD_DIR:./uploads}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    title: SwiftDrop Courier Service Documentation
+

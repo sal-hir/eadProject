@@ -1,3 +1,4 @@
+
 server:
   port: 4009
   shutdown: graceful
@@ -30,6 +31,12 @@ spring:
     user: ${DB_USERNAME}
     password: ${DB_PASSWORD}
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:swiftdrop}
+    password: ${RABBITMQ_PASS:swiftdrop_pass}
+
 management:
   endpoints:
     web:
@@ -50,3 +57,19 @@ management:
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   auth-url: ${AUTH_SERVICE_URL:http://localhost:4000}
+
+  messaging:
+    # Parcel analytics
+    parcel-exchange: ${PARCEL_EXCHANGE:swiftdrop.parcels}
+    parcel-analytics-queue: ${PARCEL_ANALYTICS_QUEUE:admin.parcel.analytics}
+    parcel-created-routing-key: ${PARCEL_CREATED_ROUTING_KEY:parcel.created}
+    parcel-status-routing-key: ${PARCEL_STATUS_ROUTING_KEY:parcel.status.updated}
+
+    # Pricing messages
+    pricing-exchange: ${PRICING_EXCHANGE:swiftdrop.pricing}
+    pricing-queue: ${PRICING_QUEUE:parcel.pricing.updates}
+    pricing-routing-key: ${PRICING_ROUTING_KEY:pricing.updated}
+
+    zone-exchange: ${ZONE_EXCHANGE:swiftdrop.zones}
+    zone-queue: ${ZONE_QUEUE:parcel.zones.updates}
+    zone-routing-key: ${ZONE_ROUTING_KEY:zone.updated}

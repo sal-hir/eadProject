@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,13 +19,16 @@ public class CourierService {
     private final CourierRepository courierRepository;
     private final CourierParcelRepository parcelRepository;
     private final ParcelStatusHistoryRepository historyRepository;
+    private final EventPublisherService eventPublisherService;
 
     public CourierService(CourierRepository courierRepository,
-            CourierParcelRepository parcelRepository,
-            ParcelStatusHistoryRepository historyRepository) {
+                          CourierParcelRepository parcelRepository,
+                          ParcelStatusHistoryRepository historyRepository,
+                          EventPublisherService eventPublisherService) {
         this.courierRepository = courierRepository;
         this.parcelRepository = parcelRepository;
         this.historyRepository = historyRepository;
+        this.eventPublisherService = eventPublisherService;
     }
 
     @Transactional
@@ -48,8 +50,8 @@ public class CourierService {
     public CourierDeliveriesResponse getMyDeliveries(IdentityGateway.Caller caller, DeliveryStatus statusFilter) {
         Courier courier = getOrCreateCourier(caller);
         List<CourierParcel> parcels = (statusFilter != null)
-                ? parcelRepository.findByCourierIdAndStatusOrderByCreatedAtDesc(courier.getId(), statusFilter)
-                : parcelRepository.findByCourierIdOrderByCreatedAtDesc(courier.getId());
+            ? parcelRepository.findByCourierIdAndStatusOrderByCreatedAtDesc(courier.getId(), statusFilter)
+            : parcelRepository.findByCourierIdOrderByCreatedAtDesc(courier.getId());
 
         List<ParcelDto> parcelDtos = parcels.stream().map(ParcelDto::fromEntity).toList();
         return new CourierDeliveriesResponse(CourierProfileDto.fromEntity(courier), parcelDtos);
@@ -67,10 +69,9 @@ public class CourierService {
     public ParcelDto updateParcelStatus(IdentityGateway.Caller caller, UUID parcelId, StatusUpdateRequest req) {
         Courier courier = getOrCreateCourier(caller);
         CourierParcel parcel = parcelRepository.findById(parcelId)
-                .orElseThrow(() -> new ApiFailure(404, "Parcel not found"));
+            .orElseThrow(() -> new ApiFailure(404, "Parcel not found"));
 
-        // Courier Isolation Guard: A courier cannot view or update another courier's
-        // parcel
+        // Courier Isolation Guard: A courier cannot view or update another courier's parcel
         boolean isAdmin = "ADMIN".equalsIgnoreCase(caller.role()) || "DISPATCHER".equalsIgnoreCase(caller.role());
         if (!isAdmin && (parcel.getCourierId() == null || !parcel.getCourierId().equals(courier.getId()))) {
             throw new ApiFailure(403, "Access denied: This parcel is not assigned to you");
@@ -101,6 +102,7 @@ public class CourierService {
             parcel.setDeliveredAt(OffsetDateTime.now());
         }
 
+        DeliveryStatus oldStatus = parcel.getStatus();
         parcel.setStatus(req.status());
         parcel = parcelRepository.save(parcel);
 
@@ -114,20 +116,29 @@ public class CourierService {
         history.setUpdatedBy(caller.id());
         historyRepository.save(history);
 
+        // Publish status changed event to RabbitMQ
+        ParcelStatusEvent event = new ParcelStatusEvent(
+            "parcel.status_changed",
+            parcel.getId(),
+            parcel.getTrackingNumber(),
+            courier.getId(),
+            courier.getName(),
+            oldStatus != null ? oldStatus.name() : null,
+            req.status().name(),
+            parcel.getRecipientName(),
+            parcel.getRecipientEmail(),
+            parcel.getRecipientPhone(),
+            parcel.getPickupCity(),
+            parcel.getDropoffCity(),
+            parcel.getWeightKg(),
+            req.note(),
+            req.failureReason(),
+            req.proofImageUrl(),
+            OffsetDateTime.now()
+        );
+        eventPublisherService.publishStatusEvent(event);
+
         return ParcelDto.fromEntity(parcel);
     }
-
-    // for get parcels to dispatch interface
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    public List getAllAvailableCouriers() {
-        List allCouriers = courierRepository.findAll();
-        List available = new ArrayList();
-        for (Object obj : allCouriers) {
-            Courier c = (Courier) obj;
-            if (Boolean.TRUE.equals(c.isAvailable())) {
-                available.add(c);
-            }
-        }
-        return available;
-    }
 }
+

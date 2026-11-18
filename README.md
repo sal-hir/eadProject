@@ -8,6 +8,28 @@ workflows are implemented. Parcel, courier, delivery orders and notification eve
 remain future work; their UI routes retain explicit coming-soon states.
 Original dashboard components are preserved for the next migration.
 
+Member 5's `/merchant` dashboard now includes owned order tables/details, status
+filtering, webhook settings, signed notifications, persisted exponential retries,
+delivery logs and a test-event action. Merchant Kubernetes Deployment/ClusterIP
+manifests are prepared. Set a private `WEBHOOK_ENCRYPTION_KEY` before configuring
+webhooks; see [dashboard, webhook API and deployment guide](docs/merchant-webhooks.md).
+Real parcel booking/status integration remains pending.
+
+Approved merchants can now generate/revoke API keys at `/merchant/credentials`.
+ADMIN can inspect/revoke keys from the merchant review page. Full keys are shown
+only once; machine requests authenticate through `X-API-Key` on Merchant Service.
+See [API key endpoints, security and Member 5 integration](docs/merchant-api-keys.md).
+OAuth client credentials are also available at `/merchant/oauth-clients`: create,
+rotate/revoke clients and request short-lived, scoped machine tokens from Merchant
+Service. See [OAuth flow and Members 1/5 contract](docs/merchant-oauth.md).
+Member 5 authenticated order intake is available at `/api/v1/merchant/orders`.
+Orders remain `PENDING_BOOKING`; actual parcel creation and live tracking await
+Member 2 integration. See [Orders API, Postman/OpenAPI and handoff](docs/merchant-orders.md).
+
+Member 4's [Kubernetes ConfigMap/Secret templates and setup guide](infrastructure/kubernetes/README.md)
+are prepared for Auth/Merchant. They contain no real credentials; live Kubernetes
+rollout depends on the team's workload and Ingress setup.
+
 ## Run with Docker Compose (recommended)
 
 Install Docker with its Linux engine running. From the repository root:
@@ -21,12 +43,53 @@ docker compose up --build
 ```
 
 Open http://localhost:3000. The API listens at http://localhost:4000.
+Merchant Service is included in Compose at http://localhost:4001. Set a separate
+random `MERCHANT_SERVICE_TOKEN` of at least 32 characters in `.env`; Compose passes
+it to both services for approval role synchronization. Merchant database settings
+default to Auth's connection while using the separate `merchant` schema. See
+[Merchant Docker setup and acceptance checks](backend/merchant-service/README.md).
 Register a customer account; no demo accounts or default passwords are seeded.
 Check health at http://localhost:4000/actuator/health/readiness.
 Compose connects to Neon without starting a local PostgreSQL container. Auth owns
 only the auth schema inside neondb. Existing public/Prisma tables and old local
 data volumes are neither migrated nor deleted. Never use
 `docker compose down -v` if you need to preserve data.
+
+## Centralized API Documentation & Swagger UI
+
+SwiftDrop provides a centralized Swagger UI where developers can explore, inspect, and execute requests against all backend microservices from a single interface.
+
+### Accessing the Centralized Swagger UI
+
+- **Centralized Swagger UI:** [http://localhost:4000/swagger-ui.html](http://localhost:4000/swagger-ui.html)
+- Use the **Select a definition** dropdown in the top-right corner to switch between service specifications:
+  - **1. Authentication & Identity Service** (Local: `/v3/api-docs`)
+  - **2. Merchant Management Service** (Aggregated: `/v3/api-docs/services/merchant`, Direct: `http://localhost:4001/v3/api-docs`)
+  - **3. Courier & Delivery Service** (Aggregated: `/v3/api-docs/services/courier`, Direct: `http://localhost:4003/v3/api-docs`)
+  - **4. Tracking Service** (Aggregated: `/v3/api-docs/services/tracking`, Direct: `http://localhost:4004/v3/api-docs`)
+  - **5. Notification Service** (Aggregated: `/v3/api-docs/services/notification`)
+
+### Individual OpenAPI Specification URLs
+
+| Service | Direct OpenAPI URL | Aggregated OpenAPI URL | Direct Swagger UI |
+|---|---|---|---|
+| **Auth Service** | `http://localhost:4000/v3/api-docs` | `/v3/api-docs` | `http://localhost:4000/swagger-ui.html` |
+| **Merchant Service** | `http://localhost:4001/v3/api-docs` | `/v3/api-docs/services/merchant` | `http://localhost:4001/swagger-ui.html` |
+| **Courier Service** | `http://localhost:4003/v3/api-docs` | `/v3/api-docs/services/courier` | `http://localhost:4003/swagger-ui.html` |
+| **Tracking Service** | `http://localhost:4004/v3/api-docs` | `/v3/api-docs/services/tracking` | `http://localhost:4004/swagger-ui.html` |
+| **Notification Service** | `http://localhost:4005/health` | `/v3/api-docs/services/notification` | — |
+
+> [!NOTE]
+> If a downstream service is offline or unreachable, the aggregation endpoint returns HTTP 503 Service Unavailable with an informative message rather than silently displaying empty or stale documentation.
+
+### Authentication Instructions for Protected Endpoints
+
+1. In Swagger UI, expand the **Authentication** group and run `POST /api/v1/auth/login` (or register a customer account first via `POST /api/v1/auth/register`).
+2. Copy the `data.token` string from the successful login response.
+3. Click the **Authorize 🔓** button in the top-right corner of Swagger UI.
+4. Paste the token into the `bearerAuth` field and click **Authorize**.
+5. All subsequent "Try it out" requests to protected endpoints (e.g. `GET /api/v1/auth/me`, `POST /api/v1/merchants/applications`, `GET /api/v1/couriers/my-deliveries`) will automatically include the `Authorization: Bearer <token>` header.
+
 
 ## Run Java and React directly
 
