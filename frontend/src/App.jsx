@@ -124,11 +124,7 @@ export const App = () => {
                     {/* Courier Routes */}
                     <Route
                       path="/courier"
-                      element={
-                        <ProtectedRoute allowedRoles={['COURIER', 'ADMIN', 'CUSTOMER']}>
-                          <CourierDashboard />
-                        </ProtectedRoute>
-                      }
+                      element={<CourierDashboard />}
                     />
 
                     {/* Parcel Details */}
