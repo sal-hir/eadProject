@@ -1,4 +1,4 @@
-﻿
+
 import axios from 'axios';
 
 // ========================================
@@ -35,23 +35,29 @@ let sessionRefresher = null;
 let refreshPromise = null;
 
 let sessionQueue = Promise.resolve();
+let errorNotifier = null;
 
+/**
+ * Register a callback that receives user-facing error messages from the global
+ * Axios error interceptor. Called by ErrorProvider on mount; returns a cleanup
+ * function that unregisters the notifier.
+ */
+export const setErrorNotifier = (callback) => {
+  errorNotifier = callback;
+  return () => { if (errorNotifier === callback) errorNotifier = null; };
+};
 
 export const setAccessToken = (token) => {
   accessToken = token;
 };
 
-
 export const setSessionRefresher = (callback) => {
-
   sessionRefresher = callback;
-
   return () => {
     if (sessionRefresher === callback) {
       sessionRefresher = null;
     }
   };
-
 };
 
 
@@ -61,16 +67,12 @@ export const setSessionRefresher = (callback) => {
 
 const createServiceClient = (baseURL) =>
   axios.create({
-
     baseURL: `${baseURL}/api/v1`,
-
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-
     timeout: 15000,
-
   });
 
 
@@ -89,16 +91,12 @@ export const api = createServiceClient(API_BASE_URL);
 // Your existing Vitest tests expect it as the second
 // Axios instance created.
 const sessionApi = axios.create({
-
   baseURL: `${API_BASE_URL}/api/v1`,
-
   withCredentials: true,
-
   headers: {
     'Content-Type': 'application/json',
     'X-SwiftDrop-CSRF': '1',
   },
-
 });
 
 
@@ -106,36 +104,28 @@ const sessionApi = axios.create({
 // MERCHANT SERVICE CLIENT
 // ========================================
 
-export const merchantApi = createServiceClient(
-  MERCHANT_API_BASE_URL
-);
+export const merchantApi = createServiceClient(MERCHANT_API_BASE_URL);
 
 
 // ========================================
 // PARCEL SERVICE CLIENT
 // ========================================
 
-export const parcelApi = createServiceClient(
-  PARCEL_API_BASE_URL
-);
+export const parcelApi = createServiceClient(PARCEL_API_BASE_URL);
 
 
 // ========================================
 // ADMIN SERVICE CLIENT
 // ========================================
 
-export const adminApi = createServiceClient(
-  ADMIN_API_BASE_URL
-);
+export const adminApi = createServiceClient(ADMIN_API_BASE_URL);
 
 
 // ========================================
 // COURIER SERVICE CLIENT
 // ========================================
 
-export const courierApi = createServiceClient(
-  COURIER_API_BASE_URL
-);
+export const courierApi = createServiceClient(COURIER_API_BASE_URL);
 
 
 // ========================================
@@ -210,7 +200,7 @@ const installAuthentication = (instance) => {
   });
 
 
-  // Handle expired access tokens
+  // Handle expired access tokens + global error notification
   instance.interceptors.response.use(
 
     (response) => response,
@@ -265,6 +255,13 @@ const installAuthentication = (instance) => {
 
         }
 
+      }
+
+      // Global error notification for non-401 errors (skip if request opted out)
+      if (error.response?.status !== 401 && !config?.silent && errorNotifier) {
+        const body = error.response?.data;
+        const message = body?.message || (error.code === 'ERR_NETWORK' ? 'Network error — please check your connection' : 'An unexpected error occurred');
+        errorNotifier(message);
       }
 
       return Promise.reject(error);
