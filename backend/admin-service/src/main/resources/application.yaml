@@ -73,4 +73,3 @@ app:
     zone-exchange: ${ZONE_EXCHANGE:swiftdrop.zones}
     zone-queue: ${ZONE_QUEUE:parcel.zones.updates}
     zone-routing-key: ${ZONE_ROUTING_KEY:zone.updated}
-

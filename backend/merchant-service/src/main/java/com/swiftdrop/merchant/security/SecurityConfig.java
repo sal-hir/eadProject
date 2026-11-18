@@ -3,6 +3,8 @@ package com.swiftdrop.merchant.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.merchant.client.IdentityGateway;
 import com.swiftdrop.merchant.exception.ApiErrors;
+import com.swiftdrop.merchant.service.ApiKeyService;
+import com.swiftdrop.merchant.service.OAuthClientService;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
@@ -32,7 +34,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    SecurityFilterChain security(HttpSecurity http, IdentityGateway identities, ObjectMapper mapper) throws Exception {
+    SecurityFilterChain security(HttpSecurity http, IdentityGateway identities, ObjectMapper mapper,
+            ApiKeyService keys, OAuthClientService oauth) throws Exception {
         return http
                 .cors(c -> {})
                 .csrf(c -> c.disable())
@@ -41,7 +44,7 @@ public class SecurityConfig {
                 .formLogin(c -> c.disable())
                 .httpBasic(c -> c.disable())
                 .logout(c -> c.disable())
-                .addFilterBefore(new IdentityFilter(identities, mapper), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new IdentityFilter(identities, mapper, keys, oauth), UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(
                                 "/api/v1/info",
@@ -50,8 +53,10 @@ public class SecurityConfig {
                                 "/swagger-ui/**", "/swagger-ui.html")
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/oauth/token").permitAll()
+                        .requestMatchers("/api/v1/merchant/orders", "/api/v1/merchant/orders/**").hasRole("MERCHANT_ORDERS")
                         .requestMatchers("/api/v1/merchant-api/oauth/**").hasRole("MERCHANT_OAUTH")
                         .requestMatchers("/api/v1/merchants/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/merchants/operations/**").hasRole("MERCHANT")
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((req, res, ex) -> ApiErrors.write(mapper, res, 401, "Authentication required"))
