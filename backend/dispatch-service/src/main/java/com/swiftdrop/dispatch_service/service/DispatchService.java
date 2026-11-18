@@ -26,11 +26,13 @@ import com.swiftdrop.dispatch_service.client.CourierClient;
 import com.swiftdrop.dispatch_service.dto.ParcelSyncResponse;
 import java.util.ArrayList;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +41,7 @@ public class DispatchService {
     private final ParcelRepository parcelRepository;
     private final EventPublisherService eventPublisherService;
     private final AuthClient authClient; // <--- මේ line එක එකතු කරන්න
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = new RestTemplate(new JdkClientHttpRequestFactory());
 
     // 1. Unassigned parcels ලබාගැනීම (පවතින Method එක)
     public List<Parcel> getUnassignedParcels() {
@@ -67,27 +69,73 @@ public class DispatchService {
     }
 
     // 4. Parcel එකක් Courier කෙනෙකුට Assign කිරීම (Workload Validation සහිතව)
-    public Parcel assignParcelToCourier(Long parcelId, String courierId) {
-        // Workload Limit Verification (Max = 5 Active Parcels)
+    public Parcel assignParcelToCourier(
+            Long parcelId,
+            String courierId,
+            String token) {
+
+        // 1. Validate the courier UUID
+        UUID courierUuid;
+
+        try {
+            courierUuid = UUID.fromString(courierId);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new IllegalArgumentException("Invalid courier UUID: " + courierId);
+        }
+
+        // 2. Get the local Dispatch parcel
+        Parcel parcel = getParcelById(parcelId);
+
+        // 3. We need the original Parcel Service UUID, not the Dispatch Long ID
+        if (parcel.getSourceParcelId() == null ||
+                parcel.getSourceParcelId().isBlank()) {
+            throw new IllegalStateException(
+                    "Original Parcel Service ID is missing for parcel: " + parcelId);
+        }
+
+        // 4. Check courier workload (maximum 5 active parcels)
         long activeDeliveries = parcelRepository.countByCourierIdAndStatusIn(
                 courierId,
                 List.of("ASSIGNED", "PICKED_UP", "IN_TRANSIT"));
 
         if (activeDeliveries >= 5) {
             throw new IllegalStateException(
-                    "Courier " + courierId + " has reached the maximum workload capacity limit (5 active parcels).");
+                    "Courier " + courierId +
+                            " has reached the maximum workload capacity limit (5 active parcels).");
         }
 
-        Parcel parcel = getParcelById(parcelId);
+        // 5. Call Parcel Service to assign the courier and update its status
+        String parcelServiceUrl = "http://parcel-service:4002/api/v1/parcels/"
+                + parcel.getSourceParcelId()
+                + "/assignment";
 
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+
+        Map<String, UUID> requestBody = Map.of("courierId", courierUuid);
+
+        HttpEntity<Map<String, UUID>> requestEntity = new HttpEntity<>(requestBody, headers);
+
+        // If Parcel Service rejects the assignment, this call throws an exception.
+        // Dispatch will not save its local assignment or publish an event.
+        restTemplate.exchange(
+                parcelServiceUrl,
+                HttpMethod.PATCH,
+                requestEntity,
+                String.class);
+
+        // 6. Parcel Service succeeded. Now update Dispatch's local record.
         parcel.setCourierId(courierId);
         parcel.setStatus("ASSIGNED");
 
         Parcel savedParcel = parcelRepository.save(parcel);
 
-        // RabbitMQ එකට Attributes 6 ම යැවීම සඳහා හරියටම pass කිරීම
+        // 7. Publish the event only after both service updates succeed
         eventPublisherService.publishParcelStatusEvent(
-                savedParcel.getId() != null ? savedParcel.getId().toString() : null,
+                savedParcel.getId() != null
+                        ? savedParcel.getId().toString()
+                        : null,
                 savedParcel.getTrackingNumber(),
                 savedParcel.getStatus(),
                 courierId,

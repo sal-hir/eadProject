@@ -49,9 +49,17 @@ public class DispatchController {
     @PostMapping("/parcels/{id}/assignments")
     public ResponseEntity<Parcel> assignCourierToParcel(
             @PathVariable("id") Long parcelId,
-            @RequestBody AssignCourierRequest request) {
-        Parcel updatedParcel = dispatchService.assignParcelToCourier(parcelId, request.getCourierId());
-        return ResponseEntity.status(HttpStatus.OK).body(updatedParcel);
+            @RequestBody AssignCourierRequest request,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+
+        String token = extractToken(authorization);
+
+        Parcel updatedParcel = dispatchService.assignParcelToCourier(
+                parcelId,
+                request.getCourierId(),
+                token);
+
+        return ResponseEntity.ok(updatedParcel);
     }
 
     // 4. DELETE /api/v1/dispatch/parcels/{id}/assignments

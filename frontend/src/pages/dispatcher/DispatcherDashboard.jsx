@@ -248,7 +248,10 @@ const DispatcherDashboard = () => {
       setAssigning(true);
       const response = await fetch(`http://localhost:8080/api/v1/dispatch/parcels/${selectedParcel.id}/assignments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({ parcelId: selectedParcel.id, courierId: selectedCourierId }),
       });
 
@@ -296,7 +299,10 @@ const DispatcherDashboard = () => {
       const promises = selectedParcelIds.map(parcelId => 
         fetch(`http://localhost:8080/api/v1/dispatch/parcels/${parcelId}/assignments`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
           body: JSON.stringify({ parcelId, courierId: selectedCourierId }),
         })
       );

@@ -22,9 +22,10 @@ import { Help } from './pages/Help';
 import { Contact } from './pages/Contact';
 
 // Member 8 Admin Pages
-import AdminAnalytics from './pages/admin/AdminAnalytics';
+
 import PricingManagement from './pages/admin/PricingManagement';
 import ZoneManagement from './pages/admin/ZoneManagement';
+import { AdminDashboard } from "./pages/admin/AdminDashboard";
 
 // Member 7 Dispatcher Page
 import DispatcherDashboard from './pages/dispatcher/DispatcherDashboard';
@@ -98,6 +99,15 @@ export const App = () => {
               }
             />
 
+            <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}>
+                      <AdminDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
             {/* Parcel Details / Tracking (Authenticated) */}
             <Route
               path="/parcels/:id"
@@ -134,14 +144,6 @@ export const App = () => {
               element={
                 <ProtectedRoute allowedRoles={['ADMIN', 'DISPATCHER']}>
                   <MilestoneUnavailable title="Administration" />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/analytics"
-              element={
-                <ProtectedRoute allowedRoles={['ADMIN']}>
-                  <AdminAnalytics />
                 </ProtectedRoute>
               }
             />

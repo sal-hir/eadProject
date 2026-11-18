@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Plus,
   Pencil,
@@ -15,19 +9,16 @@ import {
   Search,
   CheckCircle2,
   XCircle,
-  Loader2,
   Map,
   LocateFixed,
-  Ruler,
   Eye,
   Power,
-  Activity,
-  Navigation,
   Layers,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-
+  AlertCircle,
+  Activity,
+  CalendarDays,
+  Ruler,
+} from 'lucide-react';
 import {
   MapContainer,
   TileLayer,
@@ -35,84 +26,139 @@ import {
   CircleMarker,
   useMapEvents,
   useMap,
-} from "react-leaflet";
+} from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import { zoneApi } from '../../api/adminApi';
+import { Modal, ConfirmDialog } from '../../components/ui';
 
-import "leaflet/dist/leaflet.css";
+// ============================================
+// CONSTANTS & HELPERS
+// ============================================
 
-import { zoneApi } from "../../api/adminApi";
-
-// ========================================
-// CONSTANTS
-// ========================================
-
-const DEFAULT_LOCATION = {
-  latitude: 6.9271,
-  longitude: 79.8612,
-};
+const DEFAULT_LOCATION = { latitude: 6.9271, longitude: 79.8612 };
 
 const EMPTY_FORM = {
-  zoneName: "",
-  description: "",
+  zoneName: '',
+  description: '',
   active: true,
   latitude: DEFAULT_LOCATION.latitude,
   longitude: DEFAULT_LOCATION.longitude,
   radiusKm: 10,
 };
 
-// ========================================
-// HELPERS
-// ========================================
+const getZoneId = (zone) => zone?.id ?? zone?._id;
 
 const getErrorMessage = (error, fallback) => {
-  if (error?.response?.status === 401) {
-    return "Please sign in again. Authentication is required.";
-  }
-
-  if (error?.response?.status === 403) {
-    return "You do not have permission to manage delivery zones.";
-  }
-
+  if (error?.response?.status === 401) return 'Session expired. Please sign in again.';
+  if (error?.response?.status === 403) return 'Access denied.';
   return error?.response?.data?.message || fallback;
 };
 
 const getZonesFromResponse = (response) => {
   const result = response?.data?.data ?? response?.data ?? [];
-
-  if (Array.isArray(result)) return result;
-
-  return result?.content || result?.zones || [];
+  return Array.isArray(result) ? result : result?.content || result?.zones || [];
 };
-
-const getZoneId = (zone) => zone?.id ?? zone?._id;
 
 const formatDate = (date) => {
-  if (!date) return "—";
-
+  if (!date) return '—';
   const parsed = new Date(date);
-
   return Number.isNaN(parsed.getTime())
-    ? "—"
-    : parsed.toLocaleDateString();
-};
-
-// Approximate area of a circular coverage zone.
-const calculateCoverageArea = (radius) => {
-  const value = Number(radius);
-
-  if (!Number.isFinite(value) || value <= 0) return 0;
-
-  return Math.PI * value * value;
+    ? '—'
+    : parsed.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 const formatArea = (radius) => {
-  const area = calculateCoverageArea(radius);
-
+  const val = Number(radius);
+  const area = Number.isFinite(val) && val > 0 ? Math.PI * val * val : 0;
   return `${area.toFixed(1)} km²`;
 };
 
-// ========================================
-// MAP COMPONENTS
-// ========================================
+const inputClass =
+  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-700 focus:ring-4 focus:ring-blue-500/10';
+
+// ============================================
+// REUSABLE UI COMPONENTS
+// ============================================
+
+function StatCard({ title, value, icon: Icon, loading }) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50 via-sky-50/90 to-blue-100/60 p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-md hover:shadow-blue-900/5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-blue-900/70">
+            {title}
+          </p>
+          <p className="mt-2.5 text-2xl font-extrabold tracking-tight text-blue-950 tabular-nums sm:text-3xl">
+            {loading ? '—' : value}
+          </p>
+        </div>
+
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/90 text-blue-700 shadow-sm ring-1 ring-blue-200/80 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
+          <Icon size={23} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ active }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+        active
+          ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/80'
+          : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200'
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+      {active ? 'Active' : 'Inactive'}
+    </span>
+  );
+}
+
+function ActionButton({ icon: Icon, title, onClick, color = 'slate' }) {
+  const styles = {
+    blue: 'text-blue-600 hover:bg-blue-50 ring-blue-100',
+    indigo: 'text-indigo-600 hover:bg-indigo-50 ring-indigo-100',
+    green: 'text-emerald-600 hover:bg-emerald-50 ring-emerald-100',
+    amber: 'text-amber-600 hover:bg-amber-50 ring-amber-100',
+    red: 'text-rose-600 hover:bg-rose-50 ring-rose-100',
+  };
+
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-150 hover:ring-1 ${styles[color]}`}
+    >
+      <Icon size={16} />
+    </button>
+  );
+}
+
+function FormField({ label, required, error, children }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-slate-700">
+        {label}
+        {required && <span className="ml-1 text-rose-500">*</span>}
+      </label>
+      {children}
+      {error && (
+        <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-600">
+          <AlertCircle size={13} />
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// MAP HELPERS
+// ============================================
 
 function LocationSelector({ onLocationSelect }) {
   useMapEvents({
@@ -123,23 +169,16 @@ function LocationSelector({ onLocationSelect }) {
       });
     },
   });
-
   return null;
 }
 
-// Update map position when editing a different zone.
 function MapPositionUpdater({ latitude, longitude }) {
   const map = useMap();
-
   useEffect(() => {
-    if (
-      Number.isFinite(latitude) &&
-      Number.isFinite(longitude)
-    ) {
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
       map.setView([latitude, longitude], map.getZoom());
     }
   }, [latitude, longitude, map]);
-
   return null;
 }
 
@@ -157,209 +196,126 @@ function ZoneLocationMap({ form, setForm, readOnly = false }) {
     longitude <= 180;
 
   const handleLocationSelect = (location) => {
-    setForm((previous) => ({
-      ...previous,
-      ...location,
-    }));
+    if (!readOnly) setForm((prev) => ({ ...prev, ...location }));
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-900/5">
-
-      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/75 p-4 sm:flex-row sm:items-center sm:justify-between">
-
-        <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-orange-100/80 p-2.5 text-[#953002] shadow-sm">
-          </div>
-
-          <div>
-            <h3 className="font-semibold text-slate-900">
-              Delivery Coverage Map
-            </h3>
-
-            <p className="text-xs text-slate-500">
-              {readOnly
-                ? "View the selected delivery coverage."
-                : "Click the map to select the zone location."}
-            </p>
-          </div>
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+          <MapPin size={15} className="text-red-600" />
+          <span>{readOnly ? 'Coverage Boundary' : 'Click map to set center'}</span>
         </div>
 
         {!readOnly && (
           <button
             type="button"
             onClick={() => handleLocationSelect(DEFAULT_LOCATION)}
-            className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 active:scale-[0.98]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-800"
           >
-            <LocateFixed size={15} className="text-slate-500" />
-            Reset Location
+            <LocateFixed size={13} />
+            Colombo
           </button>
         )}
-
       </div>
 
-      <div className="relative z-0 h-[320px] w-full">
-
+      <div className="relative z-0 h-[250px] w-full">
         {validLocation ? (
           <MapContainer
             center={[latitude, longitude]}
             zoom={11}
-            scrollWheelZoom
+            scrollWheelZoom={!readOnly}
             className="h-full w-full"
-            style={{ height: "100%", width: "100%" }}
+            style={{ height: '100%', width: '100%' }}
           >
-
-            <MapPositionUpdater
-              latitude={latitude}
-              longitude={longitude}
-            />
-
+            <MapPositionUpdater latitude={latitude} longitude={longitude} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-
-            {!readOnly && (
-              <LocationSelector
-                onLocationSelect={handleLocationSelect}
-              />
-            )}
-
-            <Circle
-              center={[latitude, longitude]}
-              radius={
-                Number.isFinite(radiusKm) && radiusKm > 0
-                  ? radiusKm * 1000
-                  : 10000
-              }
-              pathOptions={{
-                color: "#953002",
-                fillColor: "#953002",
-                fillOpacity: 0.12,
-                weight: 2,
-              }}
-            />
-
+            {!readOnly && <LocationSelector onLocationSelect={handleLocationSelect} />}
             <CircleMarker
               center={[latitude, longitude]}
-              radius={9}
-              pathOptions={{
-                color: "#ffffff",
-                weight: 3,
-                fillColor: "#953002",
-                fillOpacity: 1,
-              }}
+              radius={8}
+              pathOptions={{ color: '#991B1B', fillColor: '#DC2626', fillOpacity: 1, weight: 2.5 }}
             />
-
+            {Number.isFinite(radiusKm) && radiusKm > 0 && (
+              <Circle
+                center={[latitude, longitude]}
+                radius={radiusKm * 1000}
+                pathOptions={{
+                  color: '#1D4ED8',
+                  fillColor: '#3B82F6',
+                  fillOpacity: 0.14,
+                  weight: 2,
+                  dashArray: '5, 6',
+                }}
+              />
+            )}
           </MapContainer>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm font-medium text-rose-500">
-            Invalid map coordinates.
+          <div className="flex h-full items-center justify-center p-6 text-xs text-slate-400">
+            Enter valid coordinates to preview map.
           </div>
         )}
-
       </div>
 
-      <div className="grid grid-cols-2 gap-4 border-t border-slate-100 bg-white p-4">
-
-        <div className="rounded-xl bg-slate-50/50 p-3 border border-slate-100">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Latitude</p>
-          <p className="mt-1 text-sm font-bold text-slate-800">
-            {validLocation ? latitude.toFixed(6) : "—"}
-          </p>
-        </div>
-
-        <div className="rounded-xl bg-slate-50/50 p-3 border border-slate-100">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Longitude</p>
-          <p className="mt-1 text-sm font-bold text-slate-800">
-            {validLocation ? longitude.toFixed(6) : "—"}
-          </p>
-        </div>
-
-      </div>
-
-    </div>
-  );
-}
-
-// ========================================
-// STAT CARD
-// ========================================
-
-function StatCard({ title, value, description, icon: Icon, color }) {
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-slate-300">
-
-      <div className="flex items-start justify-between">
+      <div className="grid grid-cols-4 gap-2 border-t border-slate-100 bg-slate-50/70 px-4 py-2.5 text-xs">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            {title}
-          </p>
-
-          <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900">
-            {value}
-          </h2>
-
-          <p className="mt-1.5 text-xs font-medium text-slate-500">
-            {description}
-          </p>
+          <span className="block text-[10px] font-semibold uppercase text-slate-400">Lat</span>
+          <span className="font-bold text-slate-800">{validLocation ? latitude.toFixed(4) : '—'}</span>
         </div>
-
-        <div className={`rounded-2xl p-3.5 shadow-sm ${color}`}>
-          <Icon size={22} />
+        <div>
+          <span className="block text-[10px] font-semibold uppercase text-slate-400">Lng</span>
+          <span className="font-bold text-slate-800">{validLocation ? longitude.toFixed(4) : '—'}</span>
+        </div>
+        <div>
+          <span className="block text-[10px] font-semibold uppercase text-slate-400">Radius</span>
+          <span className="font-bold text-slate-800">{Number.isFinite(radiusKm) ? `${radiusKm} km` : '—'}</span>
+        </div>
+        <div>
+          <span className="block text-[10px] font-semibold uppercase text-slate-400">Area</span>
+          <span className="font-bold text-blue-800">{formatArea(radiusKm)}</span>
         </div>
       </div>
-
     </div>
   );
 }
 
-// ========================================
+// ============================================
 // MAIN COMPONENT
-// ========================================
+// ============================================
 
 export default function ZoneManagement() {
   const [zones, setZones] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [updatingStatusId, setUpdatingStatusId] = useState(null);
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
-  // Paging states
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-
+  const [showModal, setShowModal] = useState(false);
   const [editingZone, setEditingZone] = useState(null);
-  const [selectedZone, setSelectedZone] = useState(null);
+  const [viewingZone, setViewingZone] = useState(null);
 
-  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [confirmToggle, setConfirmToggle] = useState(null);
 
-  // ========================================
-  // FETCH ZONES
-  // ========================================
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [formErrors, setFormErrors] = useState({});
 
-  const fetchZones = useCallback(async () => {
+  const fetchZones = useCallback(async (isSilent = false) => {
     try {
-      setLoading(true);
-      setError("");
-
+      setError('');
+      if (!isSilent) setLoading(true);
       const response = await zoneApi.getAll();
-
       setZones(getZonesFromResponse(response));
     } catch (err) {
-      setError(
-        getErrorMessage(err, "Unable to load delivery zones.")
-      );
+      setError(getErrorMessage(err, 'Failed to load delivery zones.'));
     } finally {
       setLoading(false);
     }
@@ -369,1136 +325,604 @@ export default function ZoneManagement() {
     fetchZones();
   }, [fetchZones]);
 
-  // ========================================
-  // NOTIFICATIONS
-  // ========================================
+  const totalZones = zones.length;
+  const activeZones = zones.filter((z) => z.active === true).length;
+  const inactiveZones = totalZones - activeZones;
 
-  const showSuccess = (message) => {
-    setSuccess(message);
-    setError("");
+  const filteredZones = useMemo(() => {
+    const query = searchTerm.toLowerCase().trim();
+    return zones.filter((zone) => {
+      const matchesSearch =
+        !query ||
+        String(zone.zoneName || '').toLowerCase().includes(query) ||
+        String(zone.description || '').toLowerCase().includes(query);
+
+      const matchesStatus =
+        statusFilter === 'ALL' ||
+        (statusFilter === 'ACTIVE' && zone.active === true) ||
+        (statusFilter === 'INACTIVE' && zone.active === false);
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [zones, searchTerm, statusFilter]);
+
+  const hasActiveFilters = searchTerm || statusFilter !== 'ALL';
+
+  const validateForm = () => {
+    const errors = {};
+    const zoneName = String(formData.zoneName || '');
+
+    if (!zoneName.trim()) errors.zoneName = 'Zone name is required.';
+    else if (zoneName.trim().length > 100) errors.zoneName = 'Max 100 characters.';
+
+    if (formData.description && formData.description.length > 500) {
+      errors.description = 'Max 500 characters.';
+    }
+
+    const latitude = Number(formData.latitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+      errors.latitude = 'Must be between -90 and 90.';
+    }
+
+    const longitude = Number(formData.longitude);
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      errors.longitude = 'Must be between -180 and 180.';
+    }
+
+    const radius = Number(formData.radiusKm);
+    if (!Number.isFinite(radius) || radius < 0.1 || radius > 500) {
+      errors.radiusKm = 'Must be between 0.1 and 500 km.';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
-  // ========================================
-  // CREATE MODAL
-  // ========================================
-
-  const openCreateModal = () => {
+  const handleOpenAdd = () => {
     setEditingZone(null);
-    setForm({ ...EMPTY_FORM });
-    setError("");
-    setModalOpen(true);
+    setFormData({ ...EMPTY_FORM });
+    setFormErrors({});
+    setShowModal(true);
   };
 
-  // ========================================
-  // EDIT MODAL
-  // ========================================
-
-  const openEditModal = (zone) => {
+  const handleOpenEdit = (zone) => {
     setEditingZone(zone);
-
-    setForm({
-      zoneName: zone.zoneName || "",
-      description: zone.description || "",
+    setFormData({
+      zoneName: zone.zoneName || '',
+      description: zone.description || '',
       active: zone.active ?? true,
-      latitude: Number(
-        zone.latitude ?? DEFAULT_LOCATION.latitude
-      ),
-      longitude: Number(
-        zone.longitude ?? DEFAULT_LOCATION.longitude
-      ),
+      latitude: Number(zone.latitude ?? DEFAULT_LOCATION.latitude),
+      longitude: Number(zone.longitude ?? DEFAULT_LOCATION.longitude),
       radiusKm: Number(zone.radiusKm ?? 10),
     });
-
-    setError("");
-    setModalOpen(true);
+    setFormErrors({});
+    setShowModal(true);
   };
 
-  // ========================================
-  // VIEW DETAILS
-  // ========================================
+  const handleSaveSubmit = async (e) => {
+    e.preventDefault();
+    if (saving || !validateForm()) return;
 
-  const openDetails = (zone) => {
-    setSelectedZone(zone);
-    setDetailsOpen(true);
-  };
-
-  // ========================================
-  // CLOSE MODALS
-  // ========================================
-
-  const closeModal = () => {
-    if (saving) return;
-
-    setModalOpen(false);
-    setEditingZone(null);
-    setForm({ ...EMPTY_FORM });
-    setError("");
-  };
-
-  // ========================================
-  // FORM HANDLING
-  // ========================================
-
-  const handleChange = (event) => {
-    const { name, value, type, checked } = event.target;
-
-    setForm((previous) => ({
-      ...previous,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  };
-
-  // ========================================
-  // BUILD API PAYLOAD
-  // ========================================
-
-  const buildPayload = (values) => ({
-    zoneName: String(values.zoneName || "").trim(),
-    description: String(values.description || "").trim(),
-    active: Boolean(values.active),
-    latitude: Number(values.latitude),
-    longitude: Number(values.longitude),
-    radiusKm: Number(values.radiusKm),
-  });
-
-  // ========================================
-  // CREATE / UPDATE ZONE
-  // ========================================
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    setError("");
-    setSuccess("");
-
-    const payload = buildPayload(form);
-
-    if (!payload.zoneName) {
-      setError("Please enter a zone name.");
-      return;
-    }
-
-    if (
-      !Number.isFinite(payload.latitude) ||
-      payload.latitude < -90 ||
-      payload.latitude > 90
-    ) {
-      setError("Please select a valid latitude.");
-      return;
-    }
-
-    if (
-      !Number.isFinite(payload.longitude) ||
-      payload.longitude < -180 ||
-      payload.longitude > 180
-    ) {
-      setError("Please select a valid longitude.");
-      return;
-    }
-
-    if (
-      !Number.isFinite(payload.radiusKm) ||
-      payload.radiusKm <= 0 ||
-      payload.radiusKm > 500
-    ) {
-      setError("Coverage radius must be between 0.1 and 500 km.");
-      return;
-    }
-
+    setSaving(true);
+    setError('');
     try {
-      setSaving(true);
+      const payload = {
+        zoneName: formData.zoneName.trim(),
+        description: formData.description.trim() || undefined,
+        active: formData.active,
+        latitude: Number(formData.latitude),
+        longitude: Number(formData.longitude),
+        radiusKm: Number(formData.radiusKm),
+      };
 
       if (editingZone) {
         await zoneApi.update(getZoneId(editingZone), payload);
-        showSuccess("Delivery zone updated successfully.");
+        setSuccess(`Zone "${payload.zoneName}" updated.`);
       } else {
         await zoneApi.create(payload);
-        showSuccess("Delivery zone created successfully.");
+        setSuccess(`Zone "${payload.zoneName}" created.`);
       }
 
-      setModalOpen(false);
-      setEditingZone(null);
-      setForm({ ...EMPTY_FORM });
-
-      await fetchZones();
+      setShowModal(false);
+      await fetchZones(true);
     } catch (err) {
-      setError(
-        getErrorMessage(err, "Unable to save the delivery zone.")
-      );
+      setError(getErrorMessage(err, 'Failed to save zone.'));
     } finally {
       setSaving(false);
     }
   };
 
-  // ========================================
-  // ACTIVATE / DEACTIVATE
-  // ========================================
-
-  const handleToggleStatus = async (zone) => {
-    const zoneId = getZoneId(zone);
-    const newStatus = !zone.active;
-
-    const action = newStatus ? "activate" : "deactivate";
-
-    const confirmed = window.confirm(
-      `Are you sure you want to ${action} "${zone.zoneName}"?`
-    );
-
-    if (!confirmed) return;
-
+  const handleConfirmToggle = async () => {
+    if (!confirmToggle || saving) return;
+    setSaving(true);
+    setError('');
     try {
-      setUpdatingStatusId(zoneId);
-      setError("");
-      setSuccess("");
-
-      const payload = buildPayload({
-        ...zone,
-        active: newStatus,
+      await zoneApi.update(getZoneId(confirmToggle), {
+        ...confirmToggle,
+        active: !confirmToggle.active,
       });
-
-      await zoneApi.update(zoneId, payload);
-
-      showSuccess(
-        `${zone.zoneName} ${newStatus ? "activated" : "deactivated"} successfully.`
-      );
-
-      await fetchZones();
+      setSuccess(`Zone ${!confirmToggle.active ? 'activated' : 'deactivated'}.`);
+      setConfirmToggle(null);
+      await fetchZones(true);
     } catch (err) {
-      setError(
-        getErrorMessage(err, "Unable to update zone status.")
-      );
+      setError(getErrorMessage(err, 'Failed to update status.'));
     } finally {
-      setUpdatingStatusId(null);
+      setSaving(false);
     }
   };
 
-  // ========================================
-  // DELETE ZONE
-  // ========================================
-
-  const handleDelete = async (zone) => {
-    const confirmed = window.confirm(
-      `Permanently delete "${zone.zoneName}"? Only delete zones that are not being used by deliveries or pricing records.`
-    );
-
-    if (!confirmed) return;
-
+  const handleConfirmDelete = async () => {
+    if (!confirmDelete || saving) return;
+    setSaving(true);
+    setError('');
     try {
-      const zoneId = getZoneId(zone);
-
-      setDeletingId(zoneId);
-      setError("");
-      setSuccess("");
-
-      await zoneApi.delete(zoneId);
-
-      showSuccess("Delivery zone deleted successfully.");
-
-      await fetchZones();
+      await zoneApi.delete(getZoneId(confirmDelete));
+      setSuccess(`Zone "${confirmDelete.zoneName}" deleted.`);
+      setConfirmDelete(null);
+      await fetchZones(true);
     } catch (err) {
-      setError(
-        getErrorMessage(
-          err,
-          "Unable to delete the delivery zone. It may be linked to existing records."
-        )
-      );
+      setError(getErrorMessage(err, 'Failed to delete zone.'));
     } finally {
-      setDeletingId(null);
+      setSaving(false);
     }
   };
-
-  // ========================================
-  // FILTER & PAGING ZONES
-  // ========================================
-
-  const filteredZones = useMemo(() => {
-    const keyword = search.toLowerCase().trim();
-
-    return zones.filter((zone) => {
-      const matchesSearch =
-        !keyword ||
-        zone.zoneName?.toLowerCase().includes(keyword) ||
-        zone.description?.toLowerCase().includes(keyword);
-
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        (statusFilter === "ACTIVE" && zone.active) ||
-        (statusFilter === "INACTIVE" && !zone.active);
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [zones, search, statusFilter]);
-
-  // Reset page to 1 when filters or search change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, statusFilter]);
-
-  const totalPages = Math.ceil(filteredZones.length / pageSize) || 1;
-
-  const paginatedZones = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredZones.slice(start, start + pageSize);
-  }, [filteredZones, currentPage, pageSize]);
-
-  // ========================================
-  // STATISTICS
-  // ========================================
-
-  const activeCount = zones.filter(
-    (zone) => Boolean(zone.active)
-  ).length;
-
-  const inactiveCount = zones.length - activeCount;
-
-  const totalCoverage = zones
-    .filter((zone) => zone.active)
-    .reduce(
-      (total, zone) =>
-        total + calculateCoverageArea(zone.radiusKm),
-      0
-    );
-
-  // ========================================
-  // UI
-  // ========================================
 
   return (
-    <div className="min-h-screen bg-slate-50/60 p-4 md:p-8">
-
-      {/* PAGE HEADER */}
-
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
-        <div>
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-            <span>Administration</span>
-            <span>/</span>
-            <span className="text-slate-700">
-              Zone Management
-            </span>
+    <section className="space-y-6 pb-12">
+      {/* HEADER — ONLY DARK BLUE TITLE & CREATE ZONE BUTTON */}
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex items-center gap-3.5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-900 text-white shadow-md shadow-blue-900/20">
+          <MapPin size={24} />
           </div>
-
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 md:text-3xl">
+          <h1 className="text-2xl font-extrabold tracking-tight text-blue-950 sm:text-3xl">
             Zone Management
           </h1>
-
-          <p className="mt-1.5 text-sm font-medium text-slate-500">
-            Manage delivery locations, coverage areas and zone availability.
-          </p>
         </div>
 
         <button
-          onClick={openCreateModal}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#953002] px-5 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-900/10 transition-all hover:bg-[#7b2701] hover:shadow hover:shadow-orange-900/20 active:scale-[0.98]"
+          type="button"
+          onClick={handleOpenAdd}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-900 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-blue-900/20 transition-all duration-200 hover:bg-blue-800 hover:shadow-lg active:scale-[0.98]"
         >
-          <Plus size={18} />
-          Add New Zone
+          <Plus size={18} strokeWidth={2.5} />
+          Create Zone
         </button>
-
       </div>
 
       {/* ALERTS */}
-
       {success && (
-        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm font-medium text-emerald-800 shadow-sm backdrop-blur-sm">
-          <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-          <span>{success}</span>
-
-          <button
-            onClick={() => setSuccess("")}
-            className="ml-auto rounded-lg p-1 text-emerald-600 transition hover:bg-emerald-100"
-            aria-label="Dismiss success message"
-          >
+        <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+            <span>{success}</span>
+          </div>
+          <button type="button" onClick={() => setSuccess('')} className="rounded-lg p-1 hover:bg-emerald-100">
             <X size={16} />
           </button>
         </div>
       )}
 
-      {error && !modalOpen && (
-        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-sm font-medium text-rose-800 shadow-sm backdrop-blur-sm">
-          <XCircle size={18} className="text-rose-600 shrink-0" />
-          <span>{error}</span>
-
-          <button
-            onClick={() => setError("")}
-            className="ml-auto rounded-lg p-1 text-rose-600 transition hover:bg-rose-100"
-            aria-label="Dismiss error message"
-          >
+      {error && (
+        <div className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={18} className="shrink-0 text-rose-600" />
+            <span>{error}</span>
+          </div>
+          <button type="button" onClick={() => setError('')} className="rounded-lg p-1 hover:bg-rose-100">
             <X size={16} />
           </button>
         </div>
       )}
 
-      {/* STATISTICS */}
+      {/* LIGHT-BLUE KPI CARDS */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard title="Total Zones" value={totalZones} icon={Layers} loading={loading} />
+        <StatCard title="Active Zones" value={activeZones} icon={CheckCircle2} loading={loading} />
+        <StatCard title="Inactive Zones" value={inactiveZones} icon={XCircle} loading={loading} />
+      </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* FILTERS */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-md">
+            <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search zone name or description..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-700 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
 
-        <StatCard
-          title="Total Zones"
-          value={zones.length}
-          description="All registered delivery zones"
-          icon={MapPin}
-          color="bg-orange-50 text-[#953002]"
-        />
+          <div className="flex items-center gap-2.5">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-700 focus:bg-white"
+            >
+              <option value="ALL">All Zones ({totalZones})</option>
+              <option value="ACTIVE">Active ({activeZones})</option>
+              <option value="INACTIVE">Inactive ({inactiveZones})</option>
+            </select>
 
-        <StatCard
-          title="Active Zones"
-          value={activeCount}
-          description="Available for delivery"
-          icon={CheckCircle2}
-          color="bg-emerald-50 text-emerald-600"
-        />
-
-        <StatCard
-          title="Inactive Zones"
-          value={inactiveCount}
-          description="Currently unavailable"
-          icon={XCircle}
-          color="bg-slate-100 text-slate-500"
-        />
-
-        <StatCard
-          title="Active Coverage"
-          value={`${totalCoverage.toFixed(1)} km²`}
-          description="Approximate combined area"
-          icon={Layers}
-          color="bg-sky-50 text-sky-600"
-        />
-
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('ALL');
+                }}
+                className="rounded-xl px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* TABLE */}
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5">
-
-        {/* TABLE HEADER */}
-
-        <div className="flex flex-col gap-4 border-b border-slate-100 p-5 xl:flex-row xl:items-center xl:justify-between">
-
-          <div>
-            <h2 className="text-base font-bold text-slate-900">
-              Delivery Zones Directory
-            </h2>
-
-            <p className="mt-1 text-xs font-medium text-slate-500">
-              View and manage your delivery service areas.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-
-            {/* SEARCH */}
-
-            <div className="relative">
-              <Search
-                size={16}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-
-              <input
-                type="text"
-                placeholder="Search zones..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-800 outline-none transition-all placeholder:text-slate-400 focus:bg-white focus:border-[#953002] focus:ring-2 focus:ring-orange-100 sm:w-60"
-              />
-            </div>
-
-            {/* STATUS FILTER */}
-
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-700 outline-none transition hover:bg-slate-100 focus:bg-white focus:border-[#953002]"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="ACTIVE">Active Only</option>
-              <option value="INACTIVE">Inactive Only</option>
-            </select>
-
-            {/* REFRESH */}
-
-            <button
-              onClick={fetchZones}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50"
-            >
-              <RefreshCw
-                size={15}
-                className={loading ? "animate-spin text-[#953002]" : "text-slate-500"}
-              />
-              Refresh
-            </button>
-
-          </div>
-
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <h2 className="text-sm font-bold text-slate-900">
+            Zone Directory <span className="ml-1.5 font-medium text-slate-400">({filteredZones.length})</span>
+          </h2>
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800">
+            <Activity size={14} />
+            {activeZones} Active
+          </span>
         </div>
 
-        {/* TABLE CONTENT */}
-
-        <div className="overflow-x-auto">
-
-          <table className="w-full min-w-[1050px] text-left border-collapse">
-
-            <thead className="bg-slate-50/75 text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
-              <tr>
-                <th className="px-6 py-3.5">Zone Name</th>
-                <th className="px-6 py-3.5">Location</th>
-                <th className="px-6 py-3.5">Radius</th>
-                <th className="px-6 py-3.5">Coverage Area</th>
-                <th className="px-6 py-3.5">Status</th>
-                <th className="px-6 py-3.5">Created Date</th>
-                <th className="px-6 py-3.5 text-right">Actions</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100 text-sm">
-
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-20 text-center">
-                    <Loader2
-                      size={32}
-                      className="mx-auto animate-spin text-[#953002]"
-                    />
-
-                    <p className="mt-3 text-xs font-semibold text-slate-500">
-                      Loading delivery zones...
-                    </p>
-                  </td>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16">
+            <RefreshCw size={26} className="animate-spin text-blue-800" />
+            <p className="mt-3 text-sm font-medium text-slate-500">Loading delivery zones...</p>
+          </div>
+        ) : filteredZones.length === 0 ? (
+          <div className="flex flex-col items-center justify-center px-5 py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-800">
+              <MapPin size={26} />
+            </div>
+            <h3 className="mt-4 text-base font-bold text-slate-900">No Zones Found</h3>
+            <p className="mt-1 max-w-xs text-sm text-slate-500">
+              {hasActiveFilters ? 'Try adjusting your search or filter criteria.' : 'Create your first delivery zone to get started.'}
+            </p>
+            {!hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleOpenAdd}
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800"
+              >
+                <Plus size={16} />
+                Create Zone
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-left">
+              <thead>
+                <tr className="border-b border-slate-200/80 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-6 py-3.5">Zone Name</th>
+                  <th className="px-6 py-3.5">Description</th>
+                  <th className="px-6 py-3.5">Coverage</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5">Created</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
-              ) : paginatedZones.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-20 text-center">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-3">
-                      <MapPin size={22} />
-                    </div>
+              </thead>
 
-                    <p className="text-sm font-bold text-slate-800">
-                      No delivery zones found
-                    </p>
-
-                    <p className="mt-1 text-xs font-medium text-slate-500">
-                      Try adjusting your search query or status filter.
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                paginatedZones.map((zone) => {
-                  const zoneId = getZoneId(zone);
+              <tbody className="divide-y divide-slate-100">
+                {filteredZones.map((zone) => {
+                  const id = getZoneId(zone);
+                  const isActive = zone.active === true;
 
                   return (
-                    <tr
-                      key={zoneId}
-                      className="transition-colors hover:bg-slate-50/60"
-                    >
-
-                      {/* NAME */}
-
+                    <tr key={id} className="transition-colors hover:bg-blue-50/40">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="rounded-xl bg-orange-50 p-2.5 text-[#953002] border border-orange-100/50 shadow-sm">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
                             <MapPin size={17} />
                           </div>
-
-                          <div>
-                            <p className="font-semibold text-slate-900">
-                              {zone.zoneName}
-                            </p>
-
-                            <p className="mt-0.5 max-w-[200px] truncate text-xs font-medium text-slate-400">
-                              {zone.description || "No description"}
-                            </p>
-                          </div>
+                          <span className="text-sm font-bold text-slate-900">{zone.zoneName}</span>
                         </div>
                       </td>
 
-                      {/* LOCATION */}
-
-                      <td className="px-6 py-4 text-xs font-medium text-slate-600">
-                        {zone.latitude != null &&
-                        zone.longitude != null ? (
-                          <div className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100/80 px-2.5 py-1 text-slate-700 border border-slate-200/60">
-                            <Navigation
-                              size={13}
-                              className="text-slate-400"
-                            />
-                            {Number(zone.latitude).toFixed(4)},{" "}
-                            {Number(zone.longitude).toFixed(4)}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">Not selected</span>
-                        )}
-                      </td>
-
-                      {/* RADIUS */}
-
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-[#953002] border border-orange-100">
-                          <Ruler size={13} />
-                          {zone.radiusKm ?? "—"} km
-                        </span>
-                      </td>
-
-                      {/* AREA */}
-
-                      <td className="px-6 py-4">
-                        <p className="text-xs font-bold text-slate-800">
-                          {zone.radiusKm
-                            ? formatArea(zone.radiusKm)
-                            : "—"}
-                        </p>
-
-                        <p className="mt-0.5 text-[11px] font-medium text-slate-400">
-                          Circular estimate
+                      <td className="max-w-xs px-6 py-4">
+                        <p className="truncate text-sm text-slate-600">
+                          {zone.description || '—'}
                         </p>
                       </td>
 
-                      {/* STATUS */}
-
                       <td className="px-6 py-4">
-                        {zone.active ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 border border-emerald-100">
-                            <CheckCircle2 size={13} />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 border border-slate-200">
-                            <XCircle size={13} />
-                            Inactive
-                          </span>
-                        )}
-                      </td>
-
-                      {/* DATE */}
-
-                      <td className="px-6 py-4 text-xs font-medium text-slate-500">
-                        {formatDate(zone.createdAt)}
-                      </td>
-
-                      {/* ACTIONS */}
-
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-1.5">
-
-                          <button
-                            onClick={() => openDetails(zone)}
-                            title="View details"
-                            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-                          >
-                            <Eye size={15} />
-                          </button>
-
-                          <button
-                            onClick={() => openEditModal(zone)}
-                            title="Edit zone"
-                            className="rounded-xl border border-slate-200 bg-white p-2 text-sky-600 shadow-sm transition-all hover:border-sky-200 hover:bg-sky-50"
-                          >
-                            <Pencil size={15} />
-                          </button>
-
-                          <button
-                            onClick={() => handleToggleStatus(zone)}
-                            disabled={updatingStatusId === zoneId}
-                            title={zone.active ? "Deactivate zone" : "Activate zone"}
-                            className={`rounded-xl border border-slate-200 bg-white p-2 shadow-sm transition-all disabled:opacity-50 ${
-                              zone.active
-                                ? "text-amber-600 hover:border-amber-200 hover:bg-amber-50"
-                                : "text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50"
-                            }`}
-                          >
-                            {updatingStatusId === zoneId ? (
-                              <Loader2
-                                size={15}
-                                className="animate-spin"
-                              />
-                            ) : (
-                              <Power size={15} />
-                            )}
-                          </button>
-
-                          <button
-                            onClick={() => handleDelete(zone)}
-                            disabled={deletingId === zoneId}
-                            title="Delete zone"
-                            className="rounded-xl border border-slate-200 bg-white p-2 text-rose-600 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 disabled:opacity-50"
-                          >
-                            {deletingId === zoneId ? (
-                              <Loader2
-                                size={15}
-                                className="animate-spin"
-                              />
-                            ) : (
-                              <Trash2 size={15} />
-                            )}
-                          </button>
-
+                        <div className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 tabular-nums">
+                          <Ruler size={13} className="text-slate-500" />
+                          <span>{zone.radiusKm ?? '—'} km</span>
+                          <span className="text-slate-400">({formatArea(zone.radiusKm)})</span>
                         </div>
                       </td>
 
+                      <td className="px-6 py-4">
+                        <StatusBadge active={isActive} />
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                          <CalendarDays size={14} className="text-slate-400" />
+                          {formatDate(zone.createdAt)}
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-1">
+                          <ActionButton
+                            icon={Eye}
+                            title="View Details"
+                            color="blue"
+                            onClick={() => setViewingZone(zone)}
+                          />
+                          <ActionButton
+                            icon={Pencil}
+                            title="Edit Zone"
+                            color="indigo"
+                            onClick={() => handleOpenEdit(zone)}
+                          />
+                          <ActionButton
+                            icon={Power}
+                            title={isActive ? 'Deactivate' : 'Activate'}
+                            color={isActive ? 'amber' : 'green'}
+                            onClick={() => setConfirmToggle(zone)}
+                          />
+                          <ActionButton
+                            icon={Trash2}
+                            title="Delete Zone"
+                            color="red"
+                            onClick={() => setConfirmDelete(zone)}
+                          />
+                        </div>
+                      </td>
                     </tr>
                   );
-                })
-              )}
-
-            </tbody>
-
-          </table>
-
-        </div>
-
-        {/* TABLE FOOTER & PAGING CONTROLS */}
-
-        <div className="flex flex-col gap-4 border-t border-slate-100 bg-slate-50/50 px-6 py-4 text-xs font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <span>
-              Showing <strong className="text-slate-800">{filteredZones.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}</strong> to <strong className="text-slate-800">{Math.min(currentPage * pageSize, filteredZones.length)}</strong> of <strong className="text-slate-800">{filteredZones.length}</strong> entries {filteredZones.length !== zones.length && `(filtered from ${zones.length} total)`}
-            </span>
-
-            <div className="flex items-center gap-1.5 ml-2">
-              <span className="text-slate-400">Show:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none focus:border-[#953002]"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
+                })}
+              </tbody>
+            </table>
           </div>
-
-          <div className="flex items-center gap-3">
-            <span className="text-slate-600 font-medium">
-              Page <strong className="text-slate-900">{currentPage}</strong> of <strong className="text-slate-900">{totalPages}</strong>
-            </span>
-
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft size={14} />
-                Previous
-              </button>
-
-              <button
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        </div>
-
+        )}
       </div>
 
-      {/* ========================================
-          CREATE / EDIT MODAL
-      ======================================== */}
+      {/* ADD / EDIT MODAL */}
+      {showModal && (
+        <Modal
+          open={showModal}
+          onClose={() => !saving && setShowModal(false)}
+          title={editingZone ? `Edit Zone: ${editingZone.zoneName}` : 'Create Delivery Zone'}
+          className="max-w-3xl"
+        >
+          <form onSubmit={handleSaveSubmit} className="space-y-4 pt-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="Zone Name" required error={formErrors.zoneName}>
+                <input
+                  type="text"
+                  required
+                  maxLength={100}
+                  value={formData.zoneName}
+                  onChange={(e) => setFormData({ ...formData, zoneName: e.target.value })}
+                  placeholder="e.g. Colombo Metro"
+                  className={inputClass}
+                />
+              </FormField>
 
-      {modalOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm animate-fade-in">
-
-          <div className="my-auto w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/10">
-
-            {/* HEADER */}
-
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5 bg-slate-50/50">
-
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  {editingZone
-                    ? "Edit Delivery Zone"
-                    : "Create Delivery Zone"}
-                </h2>
-
-                <p className="mt-0.5 text-xs font-medium text-slate-500">
-                  Configure the delivery zone parameters and coverage area.
-                </p>
-              </div>
-
-              <button
-                onClick={closeModal}
-                disabled={saving}
-                className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X size={20} />
-              </button>
-
+              <FormField label="Coverage Radius (km)" required error={formErrors.radiusKm}>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="500"
+                  required
+                  value={formData.radiusKm}
+                  onChange={(e) => setFormData({ ...formData, radiusKm: e.target.value })}
+                  placeholder="10"
+                  className={inputClass}
+                />
+              </FormField>
             </div>
 
-            {/* FORM */}
+            <FormField label="Description" error={formErrors.description}>
+              <textarea
+                rows={2}
+                maxLength={500}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Covered districts or operational notes..."
+                className={`${inputClass} resize-none`}
+              />
+            </FormField>
 
-            <form onSubmit={handleSubmit}>
-
-              <div className="max-h-[75vh] space-y-6 overflow-y-auto p-6">
-
-                {error && (
-                  <div className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800">
-                    <XCircle size={17} className="text-rose-600 shrink-0" />
-                    {error}
-                  </div>
-                )}
-
-                {/* BASIC DETAILS */}
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-                  <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">
-                      Zone Name <span className="text-rose-500">*</span>
-                    </label>
-
-                    <input
-                      name="zoneName"
-                      type="text"
-                      value={form.zoneName}
-                      onChange={handleChange}
-                      placeholder="Example: Colombo Zone"
-                      required
-                      maxLength={100}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-xs font-medium text-slate-800 outline-none transition-all focus:bg-white focus:border-[#953002] focus:ring-2 focus:ring-orange-100"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">
-                      Zone Status
-                    </label>
-
-                    <select
-                      name="active"
-                      value={form.active ? "true" : "false"}
-                      onChange={(event) =>
-                        setForm((previous) => ({
-                          ...previous,
-                          active: event.target.value === "true",
-                        }))
-                      }
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-xs font-semibold text-slate-800 outline-none transition focus:bg-white focus:border-[#953002]"
-                    >
-                      <option value="true">Active</option>
-                      <option value="false">Inactive</option>
-                    </select>
-                  </div>
-
-                </div>
-
-                {/* DESCRIPTION */}
-
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-600">
-                    Description
-                  </label>
-
-                  <textarea
-                    name="description"
-                    value={form.description}
-                    onChange={handleChange}
-                    placeholder="Describe the delivery zone..."
-                    rows={3}
-                    maxLength={500}
-                    className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-xs font-medium text-slate-800 outline-none transition-all focus:bg-white focus:border-[#953002] focus:ring-2 focus:ring-orange-100"
-                  />
-                </div>
-
-                {/* COVERAGE SETTINGS */}
-
-                <div className="rounded-2xl border border-orange-100 bg-orange-50/30 p-5">
-
-                  <div className="mb-4 flex items-center gap-2">
-                    <div className="rounded-lg bg-orange-100 p-1.5 text-[#953002]">
-                      <Ruler size={16} />
-                    </div>
-
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                      Coverage Settings
-                    </h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-
-                    <div className="space-y-3">
-                      <label className="block text-xs font-bold text-slate-700">
-                        Coverage Radius (KM)
-                      </label>
-
-                      <input
-                        type="number"
-                        name="radiusKm"
-                        value={form.radiusKm}
-                        onChange={handleChange}
-                        min="0.1"
-                        max="500"
-                        step="0.1"
-                        required
-                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#953002]"
-                      />
-
-                      <input
-                        type="range"
-                        min="1"
-                        max="100"
-                        step="1"
-                        value={Math.min(
-                          100,
-                          Math.max(1, Number(form.radiusKm) || 1)
-                        )}
-                        onChange={(event) =>
-                          setForm((previous) => ({
-                            ...previous,
-                            radiusKm: event.target.value,
-                          }))
-                        }
-                        className="w-full accent-[#953002] cursor-pointer pt-2"
-                      />
-
-                      <div className="flex justify-between text-[11px] font-semibold text-slate-400">
-                        <span>1 km</span>
-                        <span>100 km</span>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-orange-100/80 bg-white p-4 shadow-sm flex flex-col justify-center">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                        Estimated Coverage Area
-                      </p>
-
-                      <h3 className="mt-1 text-2xl font-extrabold text-[#953002]">
-                        {formatArea(form.radiusKm)}
-                      </h3>
-
-                      <p className="mt-1 text-[11px] font-medium text-slate-400">
-                        Calculated using π × radius².
-                      </p>
-                    </div>
-
-                  </div>
-
-                  <p className="mt-4 text-[11px] font-medium leading-relaxed text-slate-500">
-                    The radius slider is a quick control. You can also type
-                    a custom radius between 0.1 and 500 km.
-                  </p>
-
-                </div>
-
-                {/* MAP */}
-
-                <ZoneLocationMap
-                  form={form}
-                  setForm={setForm}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="Center Latitude" required error={formErrors.latitude}>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  value={formData.latitude}
+                  onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+                  placeholder="6.9271"
+                  className={inputClass}
                 />
+              </FormField>
 
-                {/* STATUS INFORMATION */}
+              <FormField label="Center Longitude" required error={formErrors.longitude}>
+                <input
+                  type="number"
+                  step="any"
+                  required
+                  value={formData.longitude}
+                  onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+                  placeholder="79.8612"
+                  className={inputClass}
+                />
+              </FormField>
+            </div>
 
-                <div className="flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
+            <ZoneLocationMap form={formData} setForm={setFormData} />
 
-                  <div className="rounded-xl bg-orange-100 p-2 text-[#953002] shrink-0 mt-0.5">
-                    <Activity size={17} />
-                  </div>
+            <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <span className="text-sm font-semibold text-slate-800">Active Zone</span>
+              <input
+                type="checkbox"
+                checked={formData.active}
+                onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+                className="h-4 w-4 rounded border-slate-300 text-blue-900 accent-blue-900"
+              />
+            </label>
 
-                  <div>
-                    <p className="text-xs font-bold text-slate-800">
-                      Zone availability guidelines
-                    </p>
-
-                    <p className="mt-0.5 text-xs font-medium leading-relaxed text-slate-500">
-                      Active zones can be used for live delivery operations.
-                      Inactive zones remain saved but should not be offered
-                      for new orders.
-                    </p>
-                  </div>
-
-                </div>
-
-              </div>
-
-              {/* FOOTER */}
-
-              <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/75 px-6 py-4">
-
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  disabled={saving}
-                  className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#953002] px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#7b2701] disabled:opacity-60"
-                >
-                  {saving && (
-                    <Loader2 size={15} className="animate-spin" />
-                  )}
-
-                  {saving
-                    ? "Saving..."
-                    : editingZone
-                      ? "Update Zone"
-                      : "Create Zone"}
-                </button>
-
-              </div>
-
-            </form>
-
-          </div>
-
-        </div>
+            <div className="flex justify-end gap-2.5 border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setShowModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800 disabled:opacity-50"
+              >
+                {saving ? <RefreshCw size={15} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                {saving ? 'Saving...' : editingZone ? 'Save Changes' : 'Create Zone'}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
-      {/* ========================================
-          VIEW DETAILS MODAL
-      ======================================== */}
+      {/* VIEW MODAL */}
+      {viewingZone && (
+        <Modal
+          open={Boolean(viewingZone)}
+          onClose={() => setViewingZone(null)}
+          title={viewingZone.zoneName}
+          className="max-w-2xl"
+        >
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase text-slate-400">Status</p>
+                <div className="mt-1.5">
+                  <StatusBadge active={viewingZone.active === true} />
+                </div>
+              </div>
 
-      {detailsOpen && selectedZone && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4 backdrop-blur-sm animate-fade-in">
-
-          <div className="my-auto w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-900/10">
-
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5 bg-slate-50/50">
-
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Zone Details
-                </h2>
-
-                <p className="mt-0.5 text-xs font-medium text-slate-500">
-                  Complete information about this delivery zone.
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase text-slate-400">Radius</p>
+                <p className="mt-1.5 text-sm font-bold text-slate-900">
+                  {viewingZone.radiusKm ?? 0} km ({formatArea(viewingZone.radiusKm)})
                 </p>
               </div>
 
-              <button
-                onClick={() => setDetailsOpen(false)}
-                className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X size={20} />
-              </button>
-
-            </div>
-
-            <div className="max-h-[75vh] space-y-5 overflow-y-auto p-6">
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900">
-                    {selectedZone.zoneName}
-                  </h3>
-
-                  <p className="mt-1 text-xs font-medium text-slate-500">
-                    {selectedZone.description || "No description available"}
-                  </p>
-                </div>
-
-                {selectedZone.active ? (
-                  <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-100">
-                    <CheckCircle2 size={15} />
-                    Active
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 border border-slate-200">
-                    <XCircle size={15} />
-                    Inactive
-                  </span>
-                )}
-
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase text-slate-400">Created</p>
+                <p className="mt-1.5 text-sm font-semibold text-slate-800">
+                  {formatDate(viewingZone.createdAt)}
+                </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Coverage Radius
-                  </p>
-
-                  <p className="mt-1.5 text-lg font-extrabold text-slate-900">
-                    {selectedZone.radiusKm ?? "—"} km
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Estimated Area
-                  </p>
-
-                  <p className="mt-1.5 text-lg font-extrabold text-slate-900">
-                    {selectedZone.radiusKm
-                      ? formatArea(selectedZone.radiusKm)
-                      : "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Created Date
-                  </p>
-
-                  <p className="mt-1.5 text-xs font-bold text-slate-900">
-                    {formatDate(selectedZone.createdAt)}
-                  </p>
-                </div>
-
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[11px] font-semibold uppercase text-slate-400">Updated</p>
+                <p className="mt-1.5 text-sm font-semibold text-slate-800">
+                  {formatDate(viewingZone.updatedAt)}
+                </p>
               </div>
-
-              <ZoneLocationMap
-                form={{
-                  latitude: Number(
-                    selectedZone.latitude ?? DEFAULT_LOCATION.latitude
-                  ),
-                  longitude: Number(
-                    selectedZone.longitude ?? DEFAULT_LOCATION.longitude
-                  ),
-                  radiusKm: Number(selectedZone.radiusKm ?? 10),
-                }}
-                setForm={() => {}}
-                readOnly
-              />
-
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50/75 px-6 py-4">
+            {viewingZone.description && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-sm text-slate-700">
+                {viewingZone.description}
+              </div>
+            )}
 
+            <ZoneLocationMap
+              form={{
+                latitude: viewingZone.latitude ?? DEFAULT_LOCATION.latitude,
+                longitude: viewingZone.longitude ?? DEFAULT_LOCATION.longitude,
+                radiusKm: viewingZone.radiusKm ?? 10,
+              }}
+              readOnly
+            />
+
+            <div className="flex justify-end gap-2.5 border-t border-slate-100 pt-4">
               <button
-                onClick={() => setDetailsOpen(false)}
-                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:border-slate-300"
+                type="button"
+                onClick={() => setViewingZone(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Close
               </button>
-
               <button
+                type="button"
                 onClick={() => {
-                  setDetailsOpen(false);
-                  openEditModal(selectedZone);
+                  const selected = viewingZone;
+                  setViewingZone(null);
+                  handleOpenEdit(selected);
                 }}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#953002] px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#7b2701]"
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
               >
                 <Pencil size={15} />
                 Edit Zone
               </button>
-
             </div>
-
           </div>
-
-        </div>
+        </Modal>
       )}
 
-    </div>
+      {/* TOGGLE DIALOG */}
+      {confirmToggle && (
+        <ConfirmDialog
+          open={Boolean(confirmToggle)}
+          onClose={() => !saving && setConfirmToggle(null)}
+          onConfirm={handleConfirmToggle}
+          title={confirmToggle.active ? 'Deactivate Zone' : 'Activate Zone'}
+          confirmLabel={confirmToggle.active ? 'Deactivate' : 'Activate'}
+          busy={saving}
+          danger={confirmToggle.active}
+        >
+          <p className="text-sm text-slate-700">
+            {confirmToggle.active ? 'Deactivate' : 'Activate'}{' '}
+            <strong>{confirmToggle.zoneName}</strong>?
+          </p>
+        </ConfirmDialog>
+      )}
+
+      {/* DELETE DIALOG */}
+      {confirmDelete && (
+        <ConfirmDialog
+          open={Boolean(confirmDelete)}
+          onClose={() => !saving && setConfirmDelete(null)}
+          onConfirm={handleConfirmDelete}
+          title="Delete Zone"
+          confirmLabel="Delete"
+          busy={saving}
+          danger
+        >
+          <p className="text-sm text-slate-700">
+            Permanently delete <strong>{confirmDelete.zoneName}</strong>? Any dependent pricing rules may be affected.
+          </p>
+        </ConfirmDialog>
+      )}
+    </section>
   );
 }

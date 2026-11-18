@@ -35,7 +35,7 @@ export function navigationFor(role) {
       { to: '/admin/users', label: 'User accounts', icon: Users },
       { to: '/admin/zones', label: 'Zone Management', icon: MapPin },
       { to: '/admin/pricing', label: 'Pricing Management', icon: DollarSign },
-      { to: '/admin/analytics', label: 'Management Analytics', icon: BarChart3 }
+      
     ] : []),
     { to: '/account', label: 'Account', icon: UserRound },
   ];
