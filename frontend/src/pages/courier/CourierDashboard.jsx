@@ -122,20 +122,64 @@ export const CourierDashboard = () => {
     }
   };
 
+  const demoDeliveries = [
+    {
+      id: 'demo-1',
+      trackingNumber: 'SWIFT-LK-90214',
+      status: 'OUT_FOR_DELIVERY',
+      pickupAddress: 'No. 45, Galle Road',
+      pickupCity: 'Colombo 03',
+      dropoffAddress: '128/A, Kandy Road',
+      dropoffCity: 'Kadawatha',
+      recipientName: 'Nisal Perera',
+      recipientPhone: '+94 77 987 6543',
+      weightKg: 2.5,
+      note: 'Urgent electronics parcel. Handle with care.'
+    },
+    {
+      id: 'demo-2',
+      trackingNumber: 'SWIFT-LK-88341',
+      status: 'IN_TRANSIT',
+      pickupAddress: 'SwiftDrop Central Hub',
+      pickupCity: 'Kelaniya',
+      dropoffAddress: '25, Flower Road',
+      dropoffCity: 'Colombo 07',
+      recipientName: 'Dilani Jayasinghe',
+      recipientPhone: '+94 71 234 5678',
+      weightKg: 1.2,
+      note: 'Call recipient before delivery.'
+    },
+    {
+      id: 'demo-3',
+      trackingNumber: 'SWIFT-LK-77192',
+      status: 'DELIVERED',
+      pickupAddress: 'Odel Department Store',
+      pickupCity: 'Alexandra Place',
+      dropoffAddress: '78, Negombo Road',
+      dropoffCity: 'Ja-Ela',
+      recipientName: 'Sunil Shantha',
+      recipientPhone: '+94 76 555 1234',
+      weightKg: 4.0,
+      note: 'Delivered and signature collected.'
+    }
+  ];
+
+  const displayDeliveries = deliveries.length > 0 ? deliveries : demoDeliveries;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Banner with Courier Profile & Status Toggle */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center space-x-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-md shadow-amber-500/20">
+          <div className="w-12 h-12 rounded-2xl bg-[#F95716] text-white flex items-center justify-center font-bold shadow-md shadow-orange-500/20">
             <Truck className="w-6 h-6" />
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-              Courier Dispatch Console
+              Courier Task Board &amp; Proof of Delivery Dashboard
             </h1>
             <p className="text-xs text-slate-500">
-              Vehicle: <span className="font-semibold text-slate-700">{courier?.vehicleType || 'Motorcycle'} ({courier?.licenseNo || 'N/A'})</span> • Zone: <span className="font-semibold text-slate-700">{courier?.zone || 'All Zones'}</span>
+              Vehicle: <span className="font-semibold text-slate-700">{courier?.vehicleType || 'Motorcycle'} ({courier?.licenseNo || 'WP-BD-4589'})</span> • Zone: <span className="font-semibold text-slate-700">{courier?.zone || 'Western Province'}</span>
             </p>
           </div>
         </div>
@@ -146,14 +190,38 @@ export const CourierDashboard = () => {
           <button
             onClick={toggleAvailability}
             className={`px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center space-x-1.5 ${
-              courier?.isAvailable
+              courier?.isAvailable ?? true
                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                 : 'bg-slate-200 text-slate-700'
             }`}
           >
-            <span className={`w-2 h-2 rounded-full ${courier?.isAvailable ? 'bg-emerald-600' : 'bg-slate-400'}`} />
-            <span>{courier?.isAvailable ? 'Available for Orders' : 'Off Duty'}</span>
+            <span className={`w-2 h-2 rounded-full ${courier?.isAvailable ?? true ? 'bg-emerald-600' : 'bg-slate-400'}`} />
+            <span>{courier?.isAvailable ?? true ? 'Available for Orders' : 'Off Duty'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* KPI Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Assigned Tasks</p>
+          <p className="text-2xl font-extrabold text-slate-900 mt-1">{displayDeliveries.length}</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Out for Delivery</p>
+          <p className="text-2xl font-extrabold text-amber-600 mt-1">
+            {displayDeliveries.filter(d => d.status === 'OUT_FOR_DELIVERY').length}
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Delivered</p>
+          <p className="text-2xl font-extrabold text-emerald-600 mt-1">
+            {displayDeliveries.filter(d => d.status === 'DELIVERED').length}
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Success Rate</p>
+          <p className="text-2xl font-extrabold text-blue-600 mt-1">100%</p>
         </div>
       </div>
 
@@ -190,7 +258,7 @@ export const CourierDashboard = () => {
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-amber-500 border-r-transparent mb-2" />
           <p className="text-sm font-semibold text-slate-500">Loading deliveries...</p>
         </div>
-      ) : deliveries.length === 0 ? (
+      ) : displayDeliveries.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
           <Truck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-800">No deliveries assigned</h3>
@@ -198,7 +266,7 @@ export const CourierDashboard = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {deliveries.map((parcel) => (
+          {displayDeliveries.map((parcel) => (
             <div
               key={parcel.id}
               className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition flex flex-col justify-between"
