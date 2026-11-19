@@ -63,7 +63,6 @@ public class ParcelController {
         );
     }
 
-    // Dispatch Service එකෙන් existing parcels ටික sync කරගැනීමට call කරන endpoint එක
     @GetMapping("/all")
     public ResponseEntity<List<ParcelResponse>> getAllParcels(
             @AuthenticationPrincipal IdentityGateway.Caller caller,
@@ -71,7 +70,6 @@ public class ParcelController {
     ) {
         String token = extractToken(authorization);
 
-        // Optional: role validation (DISPATCHER හෝ ADMIN පමණක් නම්)
         if (caller == null || (!"DISPATCHER".equalsIgnoreCase(caller.role()) && !"ADMIN".equalsIgnoreCase(caller.role()))) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -83,7 +81,6 @@ public class ParcelController {
 
         return ResponseEntity.ok(parcels);
     }
-
     @GetMapping("/{parcelId}")
     public ResponseEntity<ParcelResponse> getParcelById(
             @PathVariable UUID parcelId,

@@ -21,16 +21,19 @@ public class AuthGateway implements IdentityGateway {
     private final RestClient client;
 
     public AuthGateway(
-            @Value("${app.auth-url}") String url
+            @Value("${app.auth-url}") String url,
+            @Value("${app.allow-docker-http:false}") boolean allowDockerHttp
     ) {
 
         URI uri = URI.create(url);
 
-        // Require HTTPS outside localhost
-        if (!"https".equals(uri.getScheme())
-                && !("http".equals(uri.getScheme())
-                && Set.of("localhost", "127.0.0.1", "[::1]")
-                .contains(uri.getHost()))) {
+        // Require HTTPS outside localhost, except explicitly allowed internal Docker HTTP.
+        boolean localHttp = "http".equals(uri.getScheme())
+                && Set.of("localhost", "127.0.0.1", "[::1]").contains(uri.getHost());
+        boolean dockerServiceHttp = allowDockerHttp
+                && "http".equals(uri.getScheme())
+                && "auth-service".equals(uri.getHost());
+        if (!"https".equals(uri.getScheme()) && !localHttp && !dockerServiceHttp) {
 
             throw new IllegalArgumentException(
                     "Auth Service communication requires HTTPS outside localhost"

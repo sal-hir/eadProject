@@ -6,5 +6,12 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    proxy: {
+      '/notifications-api': {
+        target: 'http://localhost:4005',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/notifications-api/, ''),
+      },
+    },
   },
 });

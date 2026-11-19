@@ -2,6 +2,7 @@ package com.swiftdrop.merchant;
 
 import com.fasterxml.jackson.databind.*;
 import com.swiftdrop.merchant.client.IdentityGateway;
+import com.swiftdrop.merchant.client.MerchantIdentityGateway;
 import com.swiftdrop.merchant.dto.MerchantDtos.*;
 import com.swiftdrop.merchant.exception.ApiFailure;
 import com.swiftdrop.merchant.repository.ApplicationRepository;
@@ -28,10 +29,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(MerchantIntegrationTest.IdentityConfig.class)
 class MerchantIntegrationTest {
     static final UUID CUSTOMER=UUID.randomUUID(),MERCHANT=UUID.randomUUID(),ADMIN=UUID.randomUUID(),OTHER=UUID.randomUUID();
-    static class FakeIdentity implements IdentityGateway {
+    static class FakeIdentity implements IdentityGateway, MerchantIdentityGateway {
         volatile boolean outage;final Set<UUID> grants=ConcurrentHashMap.newKeySet();final AtomicInteger calls=new AtomicInteger();
         public Caller validate(String token){return switch(token){case "customer"->new Caller(CUSTOMER,"CUSTOMER");case "other"->new Caller(OTHER,"CUSTOMER");case "merchant"->new Caller(MERCHANT,"MERCHANT");case "admin"->new Caller(ADMIN,"ADMIN");case "courier"->new Caller(OTHER,"COURIER");case "dispatcher"->new Caller(OTHER,"DISPATCHER");default->throw new ApiFailure(401,"Invalid token");};}
         public void grantMerchant(String token,UUID application,UUID user){calls.incrementAndGet();if(outage)throw new ApiFailure(503,"Auth unavailable");grants.add(application);}
+        public void requireActiveMerchant(UUID userId) {}
     }
     @TestConfiguration static class IdentityConfig {@Bean @Primary FakeIdentity fakeIdentity(){return new FakeIdentity();}}
     @Autowired MockMvc mvc;@Autowired ObjectMapper json;@Autowired ApplicationRepository applications;@Autowired JdbcTemplate db;
