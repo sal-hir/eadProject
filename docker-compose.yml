@@ -81,6 +81,11 @@ services:
       DB_USERNAME: ${ADMIN_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
       DB_PASSWORD: ${ADMIN_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
       AUTH_SERVICE_URL: http://auth-service:4000
+      AUTH_ALLOW_DOCKER_HTTP: "true"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:-swiftdrop}
+      RABBITMQ_PASS: ${RABBITMQ_PASS:-swiftdrop_pass}
       MERCHANT_SERVICE_URL: http://merchant-service:4001
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       MERCHANT_SERVICE_TOKEN: ${MERCHANT_SERVICE_TOKEN:?Set a random MERCHANT_SERVICE_TOKEN of at least 32 characters}

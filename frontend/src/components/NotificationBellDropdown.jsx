@@ -68,7 +68,7 @@ export function NotificationBellDropdown() {
 
       {/* Dropdown Panel */}
       {open && (
-        <div className="absolute right-0 mt-2 w-80 sm:w-96 origin-top-right rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 focus:outline-none z-50 overflow-hidden dark:border-white/10 dark:bg-[#181E2E]">
+        <div className="fixed left-4 right-4 top-20 sm:absolute sm:left-auto sm:top-auto sm:mt-2 sm:w-96 origin-top-right rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 focus:outline-none z-50 overflow-hidden dark:border-white/10 dark:bg-[#181E2E]">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02]">
             <div className="flex items-center gap-2">

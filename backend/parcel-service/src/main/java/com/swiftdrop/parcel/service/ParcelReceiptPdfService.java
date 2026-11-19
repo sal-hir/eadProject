@@ -115,6 +115,12 @@ public class ParcelReceiptPdfService {
                         "Pickup Address", parcel.pickupAddress(), x, y);
 
                 y = writeField(content, boldFont, regularFont,
+                        "Sender Name", parcel.senderName(), x, y);
+
+                y = writeField(content, boldFont, regularFont,
+                        "Sender Phone", parcel.senderPhone(), x, y);
+
+                y = writeField(content, boldFont, regularFont,
                         "Pickup Zone", pickupZoneName, x, y);
 
                 y -= 10;
@@ -125,6 +131,12 @@ public class ParcelReceiptPdfService {
 
                 y = writeWrappedField(content, boldFont, regularFont,
                         "Delivery Address", parcel.dropoffAddress(), x, y);
+
+                y = writeField(content, boldFont, regularFont,
+                        "Receiver Name", parcel.receiverName(), x, y);
+
+                y = writeField(content, boldFont, regularFont,
+                        "Receiver Phone", parcel.receiverPhone(), x, y);
 
                 y = writeField(content, boldFont, regularFont,
                         "Delivery Zone", dropoffZoneName, x, y);
@@ -141,6 +153,16 @@ public class ParcelReceiptPdfService {
                 y = writeField(content, boldFont, regularFont,
                         "Parcel Weight", parcel.weightKg() + " kg", x, y);
 
+                y = writeWrappedField(content, boldFont, regularFont,
+                        "Description", parcel.parcelDescription(), x, y);
+
+                y = writeField(content, boldFont, regularFont,
+                        "Parcel Handling",
+                        parcel.fragile() ? "FRAGILE" : "NON-FRAGILE", x, y);
+
+                y = writeField(content, boldFont, regularFont,
+                        "Delivery Priority",
+                        parcel.deliveryPriority() + " DELIVERY", x, y);
                 y = writeField(content, boldFont, regularFont,
                         "Estimated Delivery Fee",
                         "LKR " + parcel.estimatedFee(), x, y);

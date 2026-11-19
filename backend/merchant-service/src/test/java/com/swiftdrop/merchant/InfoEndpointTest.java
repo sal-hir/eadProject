@@ -44,7 +44,7 @@ class InfoEndpointTest {
                 public void grantMerchant(String token, java.util.UUID app, java.util.UUID user) {}
             };
         }
-    }
+}
 
     @Autowired MockMvc mvc;
 

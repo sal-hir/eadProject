@@ -25,23 +25,23 @@ public class AuthGateway implements IdentityGateway {
 
         URI uri = URI.create(url);
 
-        /*
-         * if (!"https".equals(uri.getScheme())
-         * && !("http".equals(uri.getScheme())
-         * && Set.of("localhost", "127.0.0.1", "[::1]")
-         * .contains(uri.getHost()))) {
-         * 
-         * throw new IllegalArgumentException(
-         * "Auth Service communication requires HTTPS outside localhost"
-         * );
-         * }
-         */
+        boolean isLocalOrInternal = Set.of("localhost", "127.0.0.1", "[::1]", "auth-service").contains(uri.getHost())
+                || !uri.getHost().contains(".");
+
+        if (!"https".equals(uri.getScheme())
+                && !("http".equals(uri.getScheme()) && isLocalOrInternal)) {
+
+            throw new IllegalArgumentException(
+                    "Auth Service communication requires HTTPS outside localhost"
+            );
+        }
 
         var factory = new JdkClientHttpRequestFactory(
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(3))
                         .followRedirects(HttpClient.Redirect.NEVER)
-                        .build());
+                        .build()
+        );
 
         factory.setReadTimeout(Duration.ofSeconds(8));
 
@@ -73,13 +73,15 @@ public class AuthGateway implements IdentityGateway {
 
             return new Caller(
                     UUID.fromString(profile.path("id").asText()),
-                    profile.path("role").asText());
+                    profile.path("role").asText()
+            );
 
         } catch (RestClientResponseException exception) {
 
             throw new ApiFailure(
                     exception.getStatusCode().value() == 401 ? 401 : 503,
-                    "Authentication unavailable");
+                    "Authentication unavailable"
+            );
 
         } catch (RestClientException | IllegalArgumentException exception) {
 
