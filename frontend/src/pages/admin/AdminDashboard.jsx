@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { api } from "../../api/client";
 import { dispatchAnalyticsApi } from "../../api/dispatchApi";
-import { zoneApi, pricingApi } from "../../api/adminApi";
+import { zoneApi, pricingApi, analyticsApi } from "../../api/adminApi";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Modal } from "../../components/ui";
 
