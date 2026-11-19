@@ -1,23 +1,127 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Truck, LayoutDashboard, UserRound, Store, Users, ClipboardList, Menu, LogOut, Search, PlusCircle, ChevronRight } from 'lucide-react';
+import {
+  Truck,
+  LayoutDashboard,
+  UserRound,
+  Store,
+  Users,
+  ClipboardList,
+  Menu,
+  LogOut,
+  Search,
+  PlusCircle,
+  ChevronRight,
+  MapPinned,
+  DollarSign,
+  ChartNoAxesCombined,
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button, Modal } from '../components/ui';
 import { PublicFooter, publicLinks } from '../components/PublicWebsite';
-import { AiChatDrawer } from '../components/AiChatDrawer';
 
 export const roleLabels = { CUSTOMER: 'Customer', MERCHANT: 'Merchant', COURIER: 'Courier', DISPATCHER: 'Dispatcher', ADMIN: 'Admin' };
 const dashboards = { CUSTOMER: '/customer', MERCHANT: '/merchant', COURIER: '/courier', DISPATCHER: '/admin', ADMIN: '/admin' };
+
 export function navigationFor(role) {
   if (!dashboards[role]) return [];
+
   return [
-    { to: dashboards[role], label: 'Dashboard', icon: LayoutDashboard, end: true },
-    ...(role === 'CUSTOMER' ? [{ to: '/merchant/apply', label: 'Become a Merchant', icon: Store }, { to: '/customer/new', label: 'New Delivery', icon: PlusCircle }] : []),
-    ...(['CUSTOMER', 'MERCHANT'].includes(role) ? [{ to: '/merchant/application-status', label: 'Business application', icon: ClipboardList }] : []),
-    ...(role === 'ADMIN' ? [{ to: '/admin/merchants', label: 'Merchant applications', icon: Store }, { to: '/admin/users', label: 'User accounts', icon: Users }] : []),
-    { to: '/account', label: 'Account', icon: UserRound },
+    {
+      to: dashboards[role],
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      end: true,
+    },
+
+    // Customer Navigation
+    ...(role === 'CUSTOMER'
+      ? [
+          {
+            to: '/merchant/apply',
+            label: 'Become a Merchant',
+            icon: Store,
+          },
+          {
+            to: '/customer/new',
+            label: 'New Delivery',
+            icon: PlusCircle,
+          },
+        ]
+      : []),
+
+    // Customer and Merchant Navigation
+    ...(['CUSTOMER', 'MERCHANT'].includes(role)
+      ? [
+          {
+            to: '/merchant/application-status',
+            label: 'Business application',
+            icon: ClipboardList,
+          },
+        ]
+      : []),
+
+    // Admin Navigation
+    ...(role === 'ADMIN'
+      ? [
+          {
+            to: '/admin/merchants',
+            label: 'Merchant applications',
+            icon: Store,
+          },
+          {
+            to: '/admin/users',
+            label: 'User accounts',
+            icon: Users,
+          },
+          {
+            to: '/admin/zones',
+            label: 'Zone Management',
+            icon: MapPinned,
+          },
+          {
+            to: '/admin/pricing',
+            label: 'Pricing Management',
+            icon: DollarSign,
+          },
+          {
+            to: '/admin/analytics',
+            label: ' Analytics',
+            icon: ChartNoAxesCombined,
+          },
+          {
+            to: '/dispatcher/dashboard',
+            label: 'Dispatch',
+            icon: Truck,
+          },
+        ]
+      : []),
+
+    // Dispatcher Navigation
+    ...(role === 'DISPATCHER'
+      ? [
+          {
+            to: '/dispatcher/dashboard',
+            label: 'Dispatch',
+            icon: Truck,
+          },
+          {
+            to: '/admin/analytics',
+            label: 'Management Analytics',
+            icon: ChartNoAxesCombined,
+          },
+        ]
+      : []),
+
+    // Common Navigation
+    {
+      to: '/account',
+      label: 'Account',
+      icon: UserRound,
+    },
   ];
 }
+
 export function Brand({ dark = false, compact = false }) {
   return <Link to="/" aria-label="SwiftDrop home" className="flex min-w-0 items-center gap-2.5"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm"><Truck size={23} aria-hidden="true" /></span><span className={`whitespace-nowrap text-xl font-extrabold tracking-tight ${compact ? 'hidden sm:inline' : ''} ${dark ? 'text-white' : 'text-slate-900'}`}>Swift<span className={dark ? 'text-blue-300' : 'text-blue-600'}>Drop</span></span></Link>;
 }
@@ -56,21 +160,38 @@ export function TopNavbar({ portal = false }) {
     </div>
   </div>{error && <p role="alert" className="px-4 pb-3 text-sm text-rose-700">{error}</p>}</header><MobileNavigation open={open} onClose={() => setOpen(false)} role={isAuthenticated ? user?.role : null} publicPage={!portal} /></>;
 }
-const routeNames = { customer: 'Customer', merchant: 'Merchant', courier: 'Courier', admin: 'Administration', account: 'Account', users: 'User accounts', merchants: 'Merchant applications', apply: 'Business application', 'application-status': 'Application status', new: 'New delivery', parcels: 'Parcel details' };
+const routeNames = {
+  customer: 'Customer',
+  merchant: 'Merchant',
+  courier: 'Courier',
+  admin: 'Administration',
+  account: 'Account',
+  users: 'User accounts',
+  merchants: 'Merchant applications',
+  apply: 'Business application',
+  'application-status': 'Application status',
+  new: 'New delivery',
+  parcels: 'Parcel details',
+
+  // New Management Pages
+  zones: 'Zone Management',
+  pricing: 'Pricing Management',
+  analytics: 'Management Analytics',
+};
 export function Breadcrumbs() {
   const { pathname } = useLocation(); const parts = pathname.split('/').filter(Boolean);
   return <nav aria-label="Breadcrumb" className="px-4 pt-5 sm:px-6 lg:px-8"><ol className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><li><Link to="/" className="hover:text-blue-700">Home</Link></li>{parts.map((part, i) => <li key={i} className="flex min-w-0 items-center gap-2"><ChevronRight size={12} aria-hidden="true" /><span aria-current={i === parts.length - 1 ? 'page' : undefined}>{routeNames[part] || 'Details'}</span></li>)}</ol></nav>;
 }
 const SkipLink = () => <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[110] focus:rounded-lg focus:bg-white focus:p-3 focus:text-blue-700 focus:shadow-lg">Skip to content</a>;
 export function PublicLayout({ children }) {
-  return <div className="min-h-dvh bg-slate-50 text-slate-900"><SkipLink /><TopNavbar /><main id="main-content" tabIndex={-1}>{children}</main><PublicFooter /><AiChatDrawer /></div>;
+  return <div className="min-h-dvh bg-slate-50 text-slate-900"><SkipLink /><TopNavbar /><main id="main-content" tabIndex={-1}>{children}</main><PublicFooter /></div>;
 }
 export function AuthLayout({ children }) {
   return <PublicLayout><div className="auth-content mx-auto w-full max-w-5xl px-4 py-1 sm:px-6">{children}</div></PublicLayout>;
 }
 export function PortalLayout({ children }) {
   const { user } = useAuth();
-  return <div className="min-h-dvh bg-slate-50 text-slate-900"><SkipLink /><Sidebar role={user?.role} /><div className="min-w-0 lg:pl-64"><TopNavbar portal /><Breadcrumbs /><main id="main-content" tabIndex={-1} className="portal-content mx-auto w-full max-w-screen-2xl pb-10">{children}</main></div><AiChatDrawer /></div>;
+  return <div className="min-h-dvh bg-slate-50 text-slate-900"><SkipLink /><Sidebar role={user?.role} /><div className="min-w-0 lg:pl-64"><TopNavbar portal /><Breadcrumbs /><main id="main-content" tabIndex={-1} className="portal-content mx-auto w-full max-w-screen-2xl pb-10">{children}</main></div></div>;
 }
 // Named portal boundaries share one shell and derive navigation from AuthContext.
 export const CustomerLayout = PortalLayout;

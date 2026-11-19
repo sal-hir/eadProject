@@ -1,205 +1,420 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { api } from '../../api/client';
-import { useSocket } from '../../context/SocketContext';
-import { StatusBadge } from '../../components/StatusBadge';
-import { TrackingTimeline } from '../../components/TrackingTimeline';
-import { ArrowLeft, Download, MapPin, Package, User, Clock, AlertCircle } from 'lucide-react';
 
-export const ParcelDetail = () => {
+import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import {
+  ArrowLeft,
+  Package,
+  MapPin,
+  CalendarDays,
+  Weight,
+  CreditCard,
+  Truck,
+  AlertCircle,
+  RefreshCw
+} from 'lucide-react';
+
+import { parcelApi } from '../../api/client';
+
+export const ParcelDetails = () => {
+
   const { id } = useParams();
+  const navigate = useNavigate();
+
   const [parcel, setParcel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [liveUpdated, setLiveUpdated] = useState(false);
 
-  const { socket, joinParcelRoom, leaveParcelRoom } = useSocket();
 
-  const fetchParcel = async () => {
+  // Load parcel details
+  const loadParcel = useCallback(async () => {
+
+    setLoading(true);
+    setError('');
+
     try {
-      const res = await api.get(`/parcels/${id}`);
-      if (res.data.success) {
-        setParcel(res.data.data);
-      }
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load parcel details');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    fetchParcel();
+      const response = await parcelApi.get(`/parcels/${id}`);
+
+      // Support both direct response and wrapped response
+      setParcel(response.data?.data || response.data);
+
+    } catch (err) {
+
+      setError(
+        err.response?.data?.message ||
+        'Unable to load parcel details. Please try again.'
+      );
+
+    } finally {
+
+      setLoading(false);
+
+    }
+
   }, [id]);
 
+
   useEffect(() => {
-    if (!parcel?.trackingNumber) return;
 
-    joinParcelRoom(parcel.trackingNumber);
+    loadParcel();
 
-    const handleUpdate = (data) => {
-      if (data.trackingNumber === parcel.trackingNumber) {
-        setLiveUpdated(true);
-        fetchParcel();
-      }
-    };
+  }, [loadParcel]);
 
-    if (socket) {
-      socket.on('status:update', handleUpdate);
+
+  // Format booking date
+  const formatDate = (date) => {
+
+    if (!date) {
+      return 'Not available';
     }
 
-    return () => {
-      leaveParcelRoom(parcel.trackingNumber);
-      if (socket) {
-        socket.off('status:update', handleUpdate);
-      }
-    };
-  }, [parcel?.trackingNumber, socket]);
+    return new Date(date).toLocaleString('en-LK', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
 
-  const handleDownloadReceipt = async () => {
-    try {
-      const res = await api.get(`/parcels/${parcel.id}/receipt`, {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `receipt-${parcel.trackingNumber}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      alert('Could not download receipt. Only delivered parcels have receipts available.');
-    }
   };
 
+
+  // Status colors
+  const statusColors = {
+
+    BOOKED: 'bg-blue-100 text-blue-700',
+
+    PICKED_UP: 'bg-indigo-100 text-indigo-700',
+
+    IN_TRANSIT: 'bg-amber-100 text-amber-700',
+
+    OUT_FOR_DELIVERY: 'bg-purple-100 text-purple-700',
+
+    DELIVERED: 'bg-green-100 text-green-700',
+
+    CANCELLED: 'bg-rose-100 text-rose-700'
+
+  };
+
+
+  // Loading state
   if (loading) {
+
     return (
-      <div className="text-center py-20">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-r-transparent mb-3" />
-        <p className="text-slate-500 font-semibold text-sm">Loading parcel details...</p>
+
+      <div className="min-h-[60vh] flex items-center justify-center">
+
+        <div className="text-center">
+
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-600 border-r-transparent mx-auto" />
+
+          <p className="text-sm text-slate-500 mt-4">
+            Loading parcel details...
+          </p>
+
+        </div>
+
       </div>
+
     );
+
   }
 
+
+  // Error state
   if (error || !parcel) {
+
     return (
-      <div className="max-w-xl mx-auto py-12 px-4">
-        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 flex items-center space-x-3 text-sm">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span>{error || 'Parcel not found'}</span>
+
+      <div className="max-w-xl mx-auto px-4 py-16">
+
+        <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
+
+          <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-4" />
+
+          <h2 className="text-xl font-bold text-slate-900">
+            Unable to Load Parcel
+          </h2>
+
+          <p className="text-sm text-slate-500 mt-2">
+            {error || 'Parcel not found.'}
+          </p>
+
+          <div className="flex justify-center gap-3 mt-6">
+
+            <button
+              onClick={loadParcel}
+              className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold flex items-center gap-2"
+            >
+
+              <RefreshCw className="w-4 h-4" />
+
+              Try Again
+
+            </button>
+
+            <button
+              onClick={() => navigate('/customer')}
+              className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold"
+            >
+              Dashboard
+            </button>
+
+          </div>
+
         </div>
-        <Link to="/customer" className="mt-4 inline-flex items-center space-x-2 text-sm text-blue-600 font-bold hover:underline">
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to My Deliveries</span>
-        </Link>
+
       </div>
+
     );
+
   }
+
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+
+
       {/* Back button */}
-      <div>
-        <Link
-          to="/customer"
-          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 transition"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to My Deliveries</span>
-        </Link>
-      </div>
+      <button
+        onClick={() => navigate('/customer')}
+        className="flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600 mb-6"
+      >
 
-      {/* Real-time Indicator banner */}
-      <div className="flex items-center justify-between bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-sm">
-        <div className="flex items-center space-x-2">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-          </span>
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-            Real-Time Tracking Room Connected
-          </span>
-        </div>
-        {liveUpdated && (
-          <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full font-semibold animate-pulse">
-            Status Updated!
-          </span>
-        )}
-      </div>
+        <ArrowLeft className="w-4 h-4" />
 
-      {/* Main Details Card */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center pb-6 border-b border-slate-100 gap-4">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Tracking Number
-            </span>
-            <h2 className="text-2xl font-black font-mono text-slate-900 tracking-tight">
-              {parcel.trackingNumber}
-            </h2>
-          </div>
-          <div className="flex items-center space-x-3">
-            <StatusBadge status={parcel.status} />
+        Back to Dashboard
 
-            {parcel.status === 'DELIVERED' && (
-              <button
-                onClick={handleDownloadReceipt}
-                className="inline-flex items-center space-x-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-3.5 py-2 rounded-xl shadow-sm transition"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>PDF Receipt</span>
-              </button>
-            )}
-          </div>
-        </div>
+      </button>
 
-        {/* Addresses & Recipient */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl text-sm">
-          <div>
-            <span className="text-xs font-bold uppercase text-slate-400 block mb-1">Pickup Location</span>
-            <p className="font-semibold text-slate-900">{parcel.pickupAddress}</p>
-            <p className="text-slate-500 text-xs">{parcel.pickupCity}</p>
-          </div>
 
-          <div>
-            <span className="text-xs font-bold uppercase text-slate-400 block mb-1">Delivery Destination</span>
-            <p className="font-semibold text-slate-900">{parcel.dropoffAddress}</p>
-            <p className="text-slate-500 text-xs">{parcel.dropoffCity}</p>
-            <p className="text-slate-700 text-xs mt-2">
-              <span className="text-slate-400">Recipient:</span> {parcel.recipientName} ({parcel.recipientPhone})
-            </p>
-          </div>
-        </div>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
 
-        {/* Parcel Spec Table */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 border border-slate-100 rounded-xl text-xs">
-          <div>
-            <span className="text-slate-400 block">Weight</span>
-            <span className="font-bold text-slate-900 text-sm">{parcel.weightKg} kg</span>
-          </div>
-          <div>
-            <span className="text-slate-400 block">Size</span>
-            <span className="font-bold text-slate-900 text-sm">{parcel.size}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 block">Delivery Zone</span>
-            <span className="font-bold text-slate-900 text-sm">{parcel.zone?.name}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 block">Delivery Fee</span>
-            <span className="font-bold text-blue-600 text-sm">LKR {parcel.estimatedFee.toFixed(2)}</span>
-          </div>
-        </div>
-
-        {/* Visual Progress Stepper */}
         <div>
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-2">
-            Status History
-          </h3>
-          <TrackingTimeline status={parcel.status} history={parcel.statusHistory} />
+
+          <div className="flex items-center gap-2 text-blue-600 mb-2">
+
+            <Package className="w-5 h-5" />
+
+            <span className="text-xs font-bold uppercase tracking-wider">
+              Parcel Details
+            </span>
+
+          </div>
+
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+            Delivery Information
+          </h1>
+
+          <p className="text-sm text-slate-500 mt-1 break-all">
+            Parcel ID: {parcel.parcelId}
+          </p>
+
         </div>
+
+
+        <span
+          className={`inline-flex self-start px-4 py-2 rounded-full text-xs font-bold ${
+            statusColors[parcel.currentStatus] ||
+            'bg-slate-100 text-slate-700'
+          }`}
+        >
+          {parcel.currentStatus?.replaceAll('_', ' ')}
+        </span>
+
       </div>
+
+
+      {/* Tracking number */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white mb-6">
+
+        <div className="flex items-center gap-2 text-blue-100 text-sm font-semibold">
+
+          <Truck className="w-5 h-5" />
+
+          Tracking Number
+
+        </div>
+
+        <p className="text-2xl sm:text-3xl font-black tracking-wider mt-3">
+          {parcel.trackingNumber}
+        </p>
+
+        <p className="text-xs text-blue-100 mt-2">
+          Use this number to track your parcel delivery.
+        </p>
+
+        <button
+          onClick={() => navigate(`/track/${parcel.trackingNumber}`)}
+          className="mt-5 bg-white text-blue-700 px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-50"
+        >
+          Track Parcel
+        </button>
+
+      </div>
+
+
+      {/* Addresses */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+
+
+        {/* Pickup */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6">
+
+          <div className="flex items-center gap-2 text-blue-600 font-bold text-sm mb-4">
+
+            <MapPin className="w-5 h-5" />
+
+            Pickup Location
+
+          </div>
+
+          <p className="text-slate-800 font-semibold break-words">
+            {parcel.pickupAddress}
+          </p>
+
+          <p className="text-xs text-slate-500 mt-3">
+            Pickup Zone ID
+          </p>
+
+          <p className="text-xs text-slate-600 break-all mt-1">
+            {parcel.pickupZoneId}
+          </p>
+
+        </div>
+
+
+        {/* Drop-off */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6">
+
+          <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm mb-4">
+
+            <MapPin className="w-5 h-5" />
+
+            Drop-off Location
+
+          </div>
+
+          <p className="text-slate-800 font-semibold break-words">
+            {parcel.dropoffAddress}
+          </p>
+
+          <p className="text-xs text-slate-500 mt-3">
+            Drop-off Zone ID
+          </p>
+
+          <p className="text-xs text-slate-600 break-all mt-1">
+            {parcel.dropoffZoneId}
+          </p>
+
+        </div>
+
+      </div>
+
+
+      {/* Parcel information */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
+
+        <h2 className="font-bold text-slate-900 mb-5">
+          Parcel Information
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+
+          {/* Weight */}
+          <div className="flex items-start gap-3">
+
+            <Weight className="w-5 h-5 text-blue-600 mt-1" />
+
+            <div>
+
+              <p className="text-xs text-slate-500">
+                Parcel Weight
+              </p>
+
+              <p className="font-bold text-slate-800 mt-1">
+                {parcel.weightKg} kg
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* Delivery fee */}
+          <div className="flex items-start gap-3">
+
+            <CreditCard className="w-5 h-5 text-blue-600 mt-1" />
+
+            <div>
+
+              <p className="text-xs text-slate-500">
+                Estimated Delivery Fee
+              </p>
+
+              <p className="font-bold text-blue-700 mt-1">
+                LKR {Number(parcel.estimatedFee ?? 0).toFixed(2)}
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* Booking date */}
+          <div className="flex items-start gap-3">
+
+            <CalendarDays className="w-5 h-5 text-blue-600 mt-1" />
+
+            <div>
+
+              <p className="text-xs text-slate-500">
+                Booking Date
+              </p>
+
+              <p className="font-semibold text-slate-800 mt-1">
+                {formatDate(parcel.createdAt)}
+              </p>
+
+            </div>
+
+          </div>
+
+
+          {/* Pricing reference */}
+          <div className="flex items-start gap-3">
+
+            <Package className="w-5 h-5 text-blue-600 mt-1" />
+
+            <div>
+
+              <p className="text-xs text-slate-500">
+                Pricing Reference
+              </p>
+
+              <p className="font-semibold text-slate-800 mt-1 break-all">
+                {parcel.pricingId || 'Not available'}
+              </p>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      {/* Footer */}
+      <div className="text-xs text-slate-400 text-center">
+        SwiftDrop Parcel Delivery System
+      </div>
+
     </div>
+
   );
+
 };
+
+export default ParcelDetails;

@@ -1,5 +1,5 @@
 server:
-  port: ${PORT:${TRACKING_PORT:4003}}
+  port: ${PORT:${TRACKING_PORT:4004}}
 
 spring:
   application:
@@ -57,3 +57,12 @@ app:
     api-key: ${GEMINI_API_KEY:}
     model: ${GEMINI_MODEL:gemini-1.5-flash}
     endpoint: ${GEMINI_ENDPOINT:https://generativelanguage.googleapis.com/v1beta}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    title: SwiftDrop Real-Time Tracking & AI Assistant Documentation
