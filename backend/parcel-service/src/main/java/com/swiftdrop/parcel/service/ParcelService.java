@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -259,7 +260,7 @@ public class ParcelService {
             IdentityGateway.Caller caller
     ) {
 
-        requireRole(caller, "DISPATCHER");
+        requireRole(caller, "DISPATCHER" , "ADMIN");
 
         if (courierId == null) {
             throw new ResponseStatusException(
@@ -387,16 +388,16 @@ public class ParcelService {
 
     private void requireRole(
             IdentityGateway.Caller caller,
-            String requiredRole
-    ) {
+            String... allowedRoles) {
 
         if (caller == null
-                || !requiredRole.equalsIgnoreCase(caller.role())) {
+                || caller.role() == null
+                || Arrays.stream(allowedRoles)
+                .noneMatch(role -> role.equalsIgnoreCase(caller.role()))) {
 
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "You are not authorized to perform this action"
-            );
+                    "You are not authorized to perform this action");
         }
     }
 
