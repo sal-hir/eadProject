@@ -23,7 +23,6 @@ import {
   Store,
   BarChart3,
   ArrowUpRight,
-  ArrowUpRight,
   ChevronRight,
   Truck,
   Shield,
