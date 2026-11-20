@@ -62,6 +62,16 @@ public class ParcelController {
                 )
         );
     }
+    
+
+    @GetMapping("/assigned")
+    public ResponseEntity<List<ParcelResponse>> getAssignedParcels(
+            @AuthenticationPrincipal IdentityGateway.Caller caller
+    ) {
+        return ResponseEntity.ok(
+                parcelService.getAssignedParcelsForCourier(caller)
+        );
+    }
 
     @GetMapping("/all")
     public ResponseEntity<List<ParcelResponse>> getAllParcels(

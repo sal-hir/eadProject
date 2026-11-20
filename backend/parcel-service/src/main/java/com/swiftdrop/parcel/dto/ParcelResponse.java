@@ -8,6 +8,7 @@ public record ParcelResponse(
         UUID parcelId,
         UUID customerId,
         UUID merchantId,
+        UUID assignedCourierId,
         String pickupAddress,
         String dropoffAddress,
         UUID pickupZoneId,
