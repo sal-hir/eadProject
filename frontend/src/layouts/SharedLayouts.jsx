@@ -19,6 +19,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Button, Modal } from '../components/ui';
 import { PublicFooter, publicLinks } from '../components/PublicWebsite';
+import { NotificationBellDropdown } from '../components/NotificationBellDropdown';
+import { AiChatDrawer } from '../components/AiChatDrawer';
 
 export const roleLabels = { CUSTOMER: 'Customer', MERCHANT: 'Merchant', COURIER: 'Courier', DISPATCHER: 'Dispatcher', ADMIN: 'Admin' };
 const dashboards = { CUSTOMER: '/customer', MERCHANT: '/merchant', COURIER: '/courier', DISPATCHER: '/admin', ADMIN: '/admin' };
@@ -37,6 +39,11 @@ export function navigationFor(role) {
     // Customer Navigation
     ...(role === 'CUSTOMER'
       ? [
+          {
+            to: '/courier',
+            label: 'Courier Board',
+            icon: Truck,
+          },
           {
             to: '/merchant/apply',
             label: 'Become a Merchant',
@@ -154,6 +161,7 @@ export function TopNavbar({ portal = false }) {
       {!portal && <nav aria-label="Public navigation" className="hidden items-center gap-4 lg:flex">{publicLinks.map(([to, label]) => <NavLink end={to === '/'} key={to} to={to} className={({ isActive }) => `inline-flex min-h-11 items-center text-sm font-medium ${isActive ? 'text-blue-700' : 'text-slate-600 hover:text-blue-700'}`}>{label}</NavLink>)}</nav>}
       {isAuthenticated ? <>
         {!portal && <Link to={dashboards[user.role] || '/account'} className="ui-button ui-button-secondary">Dashboard</Link>}
+        <NotificationBellDropdown />
         <div className={`hidden min-w-0 text-right ${portal ? 'sm:block' : 'xl:block'}`}><p className="max-w-44 truncate text-sm font-semibold">{user.name}</p><p className="text-xs text-slate-500">{roleLabels[user.role]}</p></div>
         <Button variant="ghost" aria-label="Logout" title="Logout" busy={busy} onClick={handleLogout} className="px-2 text-slate-500"><LogOut size={20} /></Button>
       </> : <div className="hidden gap-2 sm:flex"><Link to="/login" className="ui-button ui-button-ghost">Log in</Link><Link to="/register" className="ui-button ui-button-primary">Register</Link></div>}
@@ -184,14 +192,14 @@ export function Breadcrumbs() {
 }
 const SkipLink = () => <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[110] focus:rounded-lg focus:bg-white focus:p-3 focus:text-blue-700 focus:shadow-lg">Skip to content</a>;
 export function PublicLayout({ children }) {
-  return <div className="min-h-dvh bg-slate-50 text-slate-900"><SkipLink /><TopNavbar /><main id="main-content" tabIndex={-1}>{children}</main><PublicFooter /></div>;
+  return <div className="min-h-dvh bg-[#FBF9F4] text-slate-900"><SkipLink /><TopNavbar /><main id="main-content" tabIndex={-1}>{children}</main><PublicFooter /><AiChatDrawer /></div>;
 }
 export function AuthLayout({ children }) {
   return <PublicLayout><div className="auth-content mx-auto w-full max-w-5xl px-4 py-1 sm:px-6">{children}</div></PublicLayout>;
 }
 export function PortalLayout({ children }) {
   const { user } = useAuth();
-  return <div className="min-h-dvh bg-slate-50 text-slate-900"><SkipLink /><Sidebar role={user?.role} /><div className="min-w-0 lg:pl-64"><TopNavbar portal /><Breadcrumbs /><main id="main-content" tabIndex={-1} className="portal-content mx-auto w-full max-w-screen-2xl pb-10">{children}</main></div></div>;
+  return <div className="min-h-dvh bg-[#FBF9F4] text-slate-900"><SkipLink /><Sidebar role={user?.role} /><div className="min-w-0 lg:pl-64"><TopNavbar portal /><Breadcrumbs /><main id="main-content" tabIndex={-1} className="portal-content mx-auto w-full max-w-screen-2xl pb-10">{children}</main></div><AiChatDrawer /></div>;
 }
 // Named portal boundaries share one shell and derive navigation from AuthContext.
 export const CustomerLayout = PortalLayout;

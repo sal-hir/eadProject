@@ -14,6 +14,7 @@ public class RabbitMQConfig {
     public static final String PARCEL_EXCHANGE = "swiftdrop.parcel.exchange";
     public static final String DISPATCH_PARCEL_QUEUE = "dispatch.parcel.created.queue";
     public static final String PARCEL_CREATED_ROUTING_KEY = "parcel.created";
+    public static final String PARCEL_STATUS_ROUTING_KEY = "parcel.status.updated";
 
     @Bean
     public TopicExchange parcelExchange() {
@@ -40,5 +41,14 @@ public class RabbitMQConfig {
         RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
         rabbitTemplate.setMessageConverter(jsonMessageConverter());
         return rabbitTemplate;
+    }
+
+    @Bean
+    public Binding dispatchParcelStatusBinding(
+            Queue dispatchParcelQueue,
+            TopicExchange parcelExchange) {
+        return BindingBuilder.bind(dispatchParcelQueue)
+                .to(parcelExchange)
+                .with(PARCEL_STATUS_ROUTING_KEY);
     }
 }

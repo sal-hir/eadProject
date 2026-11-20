@@ -28,6 +28,7 @@ import { Register } from './pages/Register';
 import { ActivateAccount } from './pages/ActivateAccount';
 import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery';
 import { PublicTracking } from './pages/PublicTracking';
+import { CourierDashboard } from './pages/courier/CourierDashboard';
 import { Pricing } from './pages/Pricing';
 import { Help } from './pages/Help';
 import { Contact } from './pages/Contact';
@@ -151,22 +152,18 @@ export const App = () => {
                       }
                     />
 
+                    {/* Courier Routes */}
+                    <Route
+                      path="/courier"
+                      element={<CourierDashboard />}
+                    />
+
                     {/* Parcel Details */}
                     <Route
                       path="/parcels/:id"
                       element={
                         <ProtectedRoute allowedRoles={['CUSTOMER', 'COURIER', 'MERCHANT', 'DISPATCHER', 'ADMIN']}>
                           <ParcelDetails />
-                        </ProtectedRoute>
-                      }
-                    />
-
-                    {/* Courier Routes */}
-                    <Route
-                      path="/courier"
-                      element={
-                        <ProtectedRoute allowedRoles={['COURIER', 'ADMIN']}>
-                          <MilestoneUnavailable title="Courier dashboard" />
                         </ProtectedRoute>
                       }
                     />

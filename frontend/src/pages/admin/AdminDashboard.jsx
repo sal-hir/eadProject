@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+
+import { Link } from "react-router-dom";
+
 import {
   Package,
   CheckCircle2,
@@ -29,18 +31,20 @@ import {
   Copy,
   Zap,
   Radio,
-} from 'lucide-react';
-import { api } from '../../api/client';
-import { analyticsApi, zoneApi, pricingApi } from '../../api/adminApi';
-import { StatusBadge } from '../../components/StatusBadge';
-import { Modal } from '../../components/ui';
+} from "lucide-react";
+import { api } from "../../api/client";
+import { dispatchAnalyticsApi } from "../../api/dispatchApi";
+import { zoneApi, pricingApi, analyticsApi } from "../../api/adminApi";
+import { StatusBadge } from "../../components/StatusBadge";
+import { Modal } from "../../components/ui";
 
 export const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [parcelFilter, setParcelFilter] = useState('ALL');
-  const [copiedTracking, setCopiedTracking] = useState('');
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [parcelFilter, setParcelFilter] = useState("ALL");
+  const [copiedTracking, setCopiedTracking] = useState("");
 
   // Analytics & Operational Data
   const [overview, setOverview] = useState(null);
@@ -48,23 +52,24 @@ export const AdminDashboard = () => {
   const [deliveryStatuses, setDeliveryStatuses] = useState([]);
   const [zones, setZones] = useState([]);
   const [pricingRules, setPricingRules] = useState([]);
-  const [recentParcels, setRecentParcels] = useState([]);
+
+  // Courier Service
   const [couriers, setCouriers] = useState([]);
 
   // Assignment Modal
   const [assigningParcel, setAssigningParcel] = useState(null);
-  const [selectedCourierId, setSelectedCourierId] = useState('');
+  const [selectedCourierId, setSelectedCourierId] = useState("");
   const [submittingAssign, setSubmittingAssign] = useState(false);
-  const [assignSuccess, setAssignSuccess] = useState('');
-  const [assignError, setAssignError] = useState('');
+  const [assignSuccess, setAssignSuccess] = useState("");
+  const [assignError, setAssignError] = useState("");
 
   // Date formatted
   const formattedToday = useMemo(() => {
-    return new Date().toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+    return new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   }, []);
 
@@ -76,8 +81,8 @@ export const AdminDashboard = () => {
     const fromDate = new Date();
     fromDate.setDate(today.getDate() - 6);
 
-    const fromStr = fromDate.toISOString().split('T')[0];
-    const toStr = today.toISOString().split('T')[0];
+    const fromStr = fromDate.toISOString().split("T")[0];
+    const toStr = today.toISOString().split("T")[0];
 
     const results = await Promise.allSettled([
       analyticsApi.getOverview(),
@@ -85,12 +90,12 @@ export const AdminDashboard = () => {
       analyticsApi.getDeliveryStatus(),
       zoneApi.getAll(),
       pricingApi.getAll(),
-      api.get('/parcels', { params: { limit: 10 } }),
-      api.get('/couriers'),
+      api.get("/parcels", { params: { limit: 10 } }),
+      api.get("/couriers"),
     ]);
 
     // Overview
-    if (results[0].status === 'fulfilled') {
+    if (results[0].status === "fulfilled") {
       const payload = results[0].value?.data?.data ?? results[0].value?.data;
       setOverview(payload || null);
     } else {
@@ -98,29 +103,35 @@ export const AdminDashboard = () => {
     }
 
     // Daily Deliveries
-    if (results[1].status === 'fulfilled') {
+    if (results[1].status === "fulfilled") {
       const payload = results[1].value?.data?.data ?? results[1].value?.data;
       const list = Array.isArray(payload)
         ? payload
-        : payload?.items || payload?.deliveries || payload?.dailyDeliveries || [];
+        : payload?.items ||
+          payload?.deliveries ||
+          payload?.dailyDeliveries ||
+          [];
       setDailyDeliveries(list);
     } else {
       setDailyDeliveries([]);
     }
 
     // Statuses
-    if (results[2].status === 'fulfilled') {
+    if (results[2].status === "fulfilled") {
       const payload = results[2].value?.data?.data ?? results[2].value?.data;
       const list = Array.isArray(payload)
         ? payload
-        : payload?.items || payload?.statuses || payload?.deliveryStatuses || [];
+        : payload?.items ||
+          payload?.statuses ||
+          payload?.deliveryStatuses ||
+          [];
       setDeliveryStatuses(list);
     } else {
       setDeliveryStatuses([]);
     }
 
     // Zones
-    if (results[3].status === 'fulfilled') {
+    if (results[3].status === "fulfilled") {
       const payload = results[3].value?.data?.data ?? results[3].value?.data;
       const list = Array.isArray(payload)
         ? payload
@@ -131,7 +142,7 @@ export const AdminDashboard = () => {
     }
 
     // Pricing
-    if (results[4].status === 'fulfilled') {
+    if (results[4].status === "fulfilled") {
       const payload = results[4].value?.data?.data ?? results[4].value?.data;
       const list = Array.isArray(payload)
         ? payload
@@ -142,7 +153,7 @@ export const AdminDashboard = () => {
     }
 
     // Recent Parcels
-    if (results[5].status === 'fulfilled') {
+    if (results[5].status === "fulfilled") {
       const payload = results[5].value?.data?.data ?? results[5].value?.data;
       const list = Array.isArray(payload)
         ? payload
@@ -153,11 +164,9 @@ export const AdminDashboard = () => {
     }
 
     // Couriers
-    if (results[6].status === 'fulfilled') {
+    if (results[6].status === "fulfilled") {
       const payload = results[6].value?.data?.data ?? results[6].value?.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.couriers || [];
+      const list = Array.isArray(payload) ? payload : payload?.couriers || [];
       setCouriers(list);
     } else {
       setCouriers([]);
@@ -173,50 +182,45 @@ export const AdminDashboard = () => {
 
   // Derived KPI values
   const totalParcels = Number(
-    overview?.totalDeliveries ??
-    overview?.total ??
-    recentParcels.length ??
-    0
+    overview?.totalDeliveries ?? overview?.total ?? recentParcels.length ?? 0,
   );
 
   const deliveredParcels = Number(
     overview?.successfulDeliveries ??
-    overview?.successful ??
-    overview?.completed ??
-    0
+      overview?.successful ??
+      overview?.completed ??
+      0,
   );
 
   const failedParcels = Number(
-    overview?.failedDeliveries ??
-    overview?.failed ??
-    0
+    overview?.failedDeliveries ?? overview?.failed ?? 0,
   );
 
   const pendingParcels = Number(
     overview?.pendingDeliveries ??
-    overview?.pending ??
-    Math.max(0, totalParcels - deliveredParcels - failedParcels)
+      overview?.pending ??
+      Math.max(0, totalParcels - deliveredParcels - failedParcels),
   );
 
   const successRate =
     overview?.successRate !== undefined
       ? Number(overview.successRate).toFixed(1)
       : totalParcels > 0
-      ? ((deliveredParcels / totalParcels) * 100).toFixed(1)
-      : '0.0';
+        ? ((deliveredParcels / totalParcels) * 100).toFixed(1)
+        : "0.0";
 
   const failureRate =
     overview?.failureRate !== undefined
       ? Number(overview.failureRate)
       : totalParcels > 0
-      ? ((failedParcels / totalParcels) * 100).toFixed(1)
-      : '0.0';
+        ? ((failedParcels / totalParcels) * 100).toFixed(1)
+        : "0.0";
 
   // Copy tracking number
   const handleCopyTracking = (num) => {
     navigator.clipboard.writeText(num);
     setCopiedTracking(num);
-    setTimeout(() => setCopiedTracking(''), 2500);
+    setTimeout(() => setCopiedTracking(""), 2500);
   };
 
   // Handle Assigning
@@ -225,21 +229,25 @@ export const AdminDashboard = () => {
     if (!assigningParcel || !selectedCourierId) return;
 
     setSubmittingAssign(true);
-    setAssignError('');
+    setAssignError("");
     try {
       const res = await api.patch(`/parcels/${assigningParcel.id}/assign`, {
         courierId: selectedCourierId,
       });
       if (res.data?.success || res.status === 200) {
-        setAssignSuccess(`Assigned parcel ${assigningParcel.trackingNumber} successfully!`);
-        setTimeout(() => setAssignSuccess(''), 4000);
+        setAssignSuccess(
+          `Assigned parcel ${assigningParcel.trackingNumber} successfully!`,
+        );
+        setTimeout(() => setAssignSuccess(""), 4000);
         setAssigningParcel(null);
-        setSelectedCourierId('');
+        setSelectedCourierId("");
         fetchDashboardData(true);
       }
     } catch (err) {
       setAssignError(
-        err.response?.data?.message || err.message || 'Failed to assign courier.'
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to assign courier.",
       );
     } finally {
       setSubmittingAssign(false);
@@ -250,12 +258,16 @@ export const AdminDashboard = () => {
   const filteredParcels = useMemo(() => {
     let list = recentParcels;
 
-    if (parcelFilter === 'IN_TRANSIT') {
-      list = list.filter((p) => p.status === 'IN_TRANSIT' || p.status === 'ASSIGNED');
-    } else if (parcelFilter === 'DELIVERED') {
-      list = list.filter((p) => p.status === 'DELIVERED' || p.status === 'COMPLETED');
-    } else if (parcelFilter === 'UNASSIGNED') {
-      list = list.filter((p) => !p.courierId && p.status !== 'DELIVERED');
+    if (parcelFilter === "IN_TRANSIT") {
+      list = list.filter(
+        (p) => p.status === "IN_TRANSIT" || p.status === "ASSIGNED",
+      );
+    } else if (parcelFilter === "DELIVERED") {
+      list = list.filter(
+        (p) => p.status === "DELIVERED" || p.status === "COMPLETED",
+      );
+    } else if (parcelFilter === "UNASSIGNED") {
+      list = list.filter((p) => !p.courierId && p.status !== "DELIVERED");
     }
 
     if (!searchQuery.trim()) return list;
@@ -266,7 +278,7 @@ export const AdminDashboard = () => {
         p.recipientName?.toLowerCase().includes(q) ||
         p.dropoffCity?.toLowerCase().includes(q) ||
         p.pickupCity?.toLowerCase().includes(q) ||
-        p.status?.toLowerCase().includes(q)
+        p.status?.toLowerCase().includes(q),
     );
   }, [recentParcels, searchQuery, parcelFilter]);
 
@@ -291,7 +303,8 @@ export const AdminDashboard = () => {
               Welcome back, <span className="text-blue-600">Administrator</span>
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 max-w-2xl">
-              Island-wide courier routing, delivery fulfillment telemetry, coverage zones, and revenue tariffs.
+              Island-wide courier routing, delivery fulfillment telemetry,
+              coverage zones, and revenue tariffs.
             </p>
           </div>
 
@@ -312,7 +325,7 @@ export const AdminDashboard = () => {
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => setSearchQuery("")}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   <X size={14} />
@@ -329,9 +342,11 @@ export const AdminDashboard = () => {
             >
               <RefreshCw
                 size={14}
-                className={refreshing ? 'animate-spin text-blue-600' : 'text-slate-500'}
+                className={
+                  refreshing ? "animate-spin text-blue-600" : "text-slate-500"
+                }
               />
-              <span>{refreshing ? 'Syncing...' : 'Sync Data'}</span>
+              <span>{refreshing ? "Syncing..." : "Sync Data"}</span>
             </button>
 
             {/* Quick Action Link */}
@@ -352,7 +367,10 @@ export const AdminDashboard = () => {
             <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
             <span>{assignSuccess}</span>
           </div>
-          <button onClick={() => setAssignSuccess('')} className="text-emerald-600 hover:text-emerald-800">
+          <button
+            onClick={() => setAssignSuccess("")}
+            className="text-emerald-600 hover:text-emerald-800"
+          >
             <X size={14} />
           </button>
         </div>
@@ -368,7 +386,7 @@ export const AdminDashboard = () => {
                 Total Parcels
               </p>
               <p className="text-3xl font-extrabold text-slate-900">
-                {loading ? '—' : Number(totalParcels).toLocaleString()}
+                {loading ? "—" : Number(totalParcels).toLocaleString()}
               </p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 shadow-sm shadow-blue-500/10">
@@ -389,7 +407,7 @@ export const AdminDashboard = () => {
                 Delivered Parcels
               </p>
               <p className="text-3xl font-extrabold text-emerald-600">
-                {loading ? '—' : Number(deliveredParcels).toLocaleString()}
+                {loading ? "—" : Number(deliveredParcels).toLocaleString()}
               </p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-sm shadow-emerald-500/10">
@@ -413,7 +431,7 @@ export const AdminDashboard = () => {
                 Pending Deliveries
               </p>
               <p className="text-3xl font-extrabold text-amber-500">
-                {loading ? '—' : Number(pendingParcels).toLocaleString()}
+                {loading ? "—" : Number(pendingParcels).toLocaleString()}
               </p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 shadow-sm shadow-amber-500/10">
@@ -421,7 +439,9 @@ export const AdminDashboard = () => {
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
-            <span className="font-semibold text-amber-600">In Transit & Assigned</span>
+            <span className="font-semibold text-amber-600">
+              In Transit & Assigned
+            </span>
             <span className="text-[11px] text-slate-400">Active drop-offs</span>
           </div>
         </div>
@@ -434,7 +454,7 @@ export const AdminDashboard = () => {
                 Failed Deliveries
               </p>
               <p className="text-3xl font-extrabold text-rose-600">
-                {loading ? '—' : Number(failedParcels).toLocaleString()}
+                {loading ? "—" : Number(failedParcels).toLocaleString()}
               </p>
             </div>
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 shadow-sm shadow-rose-500/10">
@@ -466,7 +486,8 @@ export const AdminDashboard = () => {
                 </h3>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Volume of parcel dispatches across island-wide zones over recent dates
+                Volume of parcel dispatches across island-wide zones over recent
+                dates
               </p>
             </div>
 
@@ -551,11 +572,16 @@ export const AdminDashboard = () => {
                       Zone Management
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      {zones.length > 0 ? `${zones.length} active coverage zones` : 'Manage delivery boundaries'}
+                      {zones.length > 0
+                        ? `${zones.length} active coverage zones`
+                        : "Manage delivery boundaries"}
                     </p>
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
+                <ChevronRight
+                  size={16}
+                  className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition"
+                />
               </Link>
 
               {/* Shortcut 2: Pricing Management */}
@@ -572,11 +598,16 @@ export const AdminDashboard = () => {
                       Pricing Management
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      {pricingRules.length > 0 ? `${pricingRules.length} rate rules active` : 'Configure weight tariffs'}
+                      {pricingRules.length > 0
+                        ? `${pricingRules.length} rate rules active`
+                        : "Configure weight tariffs"}
                     </p>
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
+                <ChevronRight
+                  size={16}
+                  className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition"
+                />
               </Link>
 
               {/* Shortcut 3: User Accounts */}
@@ -597,7 +628,10 @@ export const AdminDashboard = () => {
                     </p>
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
+                <ChevronRight
+                  size={16}
+                  className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition"
+                />
               </Link>
 
               {/* Shortcut 4: Merchant Applications */}
@@ -618,7 +652,10 @@ export const AdminDashboard = () => {
                     </p>
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
+                <ChevronRight
+                  size={16}
+                  className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition"
+                />
               </Link>
             </div>
           </div>
@@ -638,7 +675,7 @@ export const AdminDashboard = () => {
         <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="font-bold text-slate-900">
                 Recent Parcel Activities
               </h3>
               <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
@@ -646,17 +683,18 @@ export const AdminDashboard = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Live updates from active parcels, routing status, and dispatch assignments
+              Live updates from active parcels, routing status, and dispatch
+              assignments
             </p>
           </div>
 
           {/* Filter Pills */}
           <div className="flex flex-wrap items-center gap-2">
             {[
-              { id: 'ALL', label: 'All Orders' },
-              { id: 'IN_TRANSIT', label: 'In Transit' },
-              { id: 'DELIVERED', label: 'Delivered' },
-              { id: 'UNASSIGNED', label: 'Unassigned' },
+              { id: "ALL", label: "All Orders" },
+              { id: "IN_TRANSIT", label: "In Transit" },
+              { id: "DELIVERED", label: "Delivered" },
+              { id: "UNASSIGNED", label: "Unassigned" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -664,8 +702,8 @@ export const AdminDashboard = () => {
                 onClick={() => setParcelFilter(tab.id)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
                   parcelFilter === tab.id
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
                 }`}
               >
                 {tab.label}
@@ -679,11 +717,13 @@ export const AdminDashboard = () => {
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
               <Package size={24} />
             </div>
-            <h4 className="text-sm font-bold text-slate-800">No Parcel Activities Found</h4>
+            <h4 className="text-sm font-bold text-slate-800">
+              No Parcel Activities Found
+            </h4>
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
               {searchQuery
                 ? `No parcels match the search query "${searchQuery}".`
-                : 'There are currently no recorded parcel activities matching this filter.'}
+                : "There are currently no recorded parcel activities matching this filter."}
             </p>
           </div>
         ) : (
@@ -691,31 +731,37 @@ export const AdminDashboard = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 text-slate-500 uppercase font-semibold border-b border-slate-200">
                 <tr>
-                  <th className="px-6 py-3.5">Tracking Number</th>
-                  <th className="px-6 py-3.5">Route</th>
-                  <th className="px-6 py-3.5">Recipient</th>
-                  <th className="px-6 py-3.5">Weight</th>
-                  <th className="px-6 py-3.5">Status</th>
-                  <th className="px-6 py-3.5 text-right">Actions</th>
+                  <th className="px-5 py-4">Tracking Number</th>
+                  <th className="px-5 py-4">Route</th>
+                  <th className="px-5 py-4">Recipient</th>
+                  <th className="px-5 py-4">Weight</th>
+                  <th className="px-5 py-4">Status</th>
+                  <th className="px-5 py-4">Courier</th>
+                  <th className="px-5 py-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredParcels.map((parcel) => (
-                  <tr key={parcel.id || parcel.trackingNumber} className="hover:bg-slate-50/60 transition">
+                  <tr
+                    key={parcel.id || parcel.trackingNumber}
+                    className="hover:bg-slate-50/60 transition"
+                  >
                     <td className="px-6 py-4 font-mono font-bold text-slate-900">
                       <div className="flex items-center gap-2">
-                        <span>{parcel.trackingNumber || '—'}</span>
+                        <span>{parcel.trackingNumber || "—"}</span>
                         {parcel.trackingNumber && (
                           <button
                             type="button"
-                            onClick={() => handleCopyTracking(parcel.trackingNumber)}
+                            onClick={() =>
+                              handleCopyTracking(parcel.trackingNumber)
+                            }
                             title="Copy Tracking Number"
                             className="text-slate-400 hover:text-blue-600 transition"
                           >
                             {copiedTracking === parcel.trackingNumber ? (
                               <Check size={13} className="text-emerald-600" />
                             ) : (
-                              <Copy size={13} />
+                              <Copy size={13} className="text-slate-400" />
                             )}
                           </button>
                         )}
@@ -724,36 +770,38 @@ export const AdminDashboard = () => {
 
                     <td className="px-6 py-4 text-slate-600">
                       <div className="flex items-center gap-1.5 font-medium">
-                        <span>{parcel.pickupCity || 'Colombo'}</span>
+                        <span>{parcel.pickupCity || "Colombo"}</span>
                         <span className="text-slate-400">→</span>
-                        <span className="text-slate-900">{parcel.dropoffCity || 'Kandy'}</span>
+                        <span className="text-slate-900">
+                          {parcel.dropoffCity || "Kandy"}
+                        </span>
                       </div>
                     </td>
 
                     <td className="px-6 py-4 text-slate-700">
                       <div className="font-semibold text-slate-900">
-                        {parcel.recipientName || 'Recipient'}
+                        {parcel.recipientName || "Recipient"}
                       </div>
                       <div className="text-[11px] text-slate-400">
-                        {parcel.recipientPhone || '—'}
+                        {parcel.recipientPhone || "—"}
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 font-medium text-slate-600">
-                      {parcel.weightKg ? `${parcel.weightKg} kg` : '—'}
+                    <td className="px-5 py-4 text-slate-600">
+                      {parcel.weightKg != null ? `${parcel.weightKg} kg` : "—"}
                     </td>
 
-                    <td className="px-6 py-4">
-                      <StatusBadge status={parcel.status || 'PENDING'} />
+                    <td className="px-5 py-4">
+                      <StatusBadge status={parcel.status || "PENDING"} />
                     </td>
 
                     <td className="px-6 py-4 text-right">
-                      {(!parcel.courierId && parcel.status !== 'DELIVERED') ? (
+                      {!parcel.courierId && parcel.status !== "DELIVERED" ? (
                         <button
                           type="button"
                           onClick={() => {
                             setAssigningParcel(parcel);
-                            setSelectedCourierId(couriers[0]?.id || '');
+                            setSelectedCourierId(couriers[0]?.id || "");
                           }}
                           className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition"
                         >
@@ -762,7 +810,9 @@ export const AdminDashboard = () => {
                         </button>
                       ) : (
                         <span className="text-[11px] font-semibold text-slate-400">
-                          {parcel.courier?.user?.name ? `Courier: ${parcel.courier.user.name}` : 'Completed'}
+                          {parcel.courier?.user?.name
+                            ? `Courier: ${parcel.courier.user.name}`
+                            : "Completed"}
                         </span>
                       )}
                     </td>
@@ -779,21 +829,27 @@ export const AdminDashboard = () => {
         <Modal
           open={Boolean(assigningParcel)}
           onClose={() => setAssigningParcel(null)}
-          title={`Assign Courier to ${assigningParcel.trackingNumber}`}
+          title={`Assign Courier - ${assigningParcel.trackingNumber}`}
         >
           <div className="space-y-4 pt-1">
             <div className="rounded-xl bg-slate-50 p-3.5 text-xs space-y-1 text-slate-600 border border-slate-200">
               <div className="flex justify-between">
                 <span>Destination:</span>
-                <strong className="text-slate-900">{assigningParcel.dropoffCity}</strong>
+                <strong className="text-slate-900">
+                  {assigningParcel.dropoffCity}
+                </strong>
               </div>
               <div className="flex justify-between">
                 <span>Weight:</span>
-                <strong className="text-slate-900">{assigningParcel.weightKg || '1.0'} kg</strong>
+                <strong className="text-slate-900">
+                  {assigningParcel.weightKg || "1.0"} kg
+                </strong>
               </div>
               <div className="flex justify-between">
                 <span>Recipient:</span>
-                <strong className="text-slate-900">{assigningParcel.recipientName}</strong>
+                <strong className="text-slate-900">
+                  {assigningParcel.recipientName}
+                </strong>
               </div>
             </div>
 
@@ -810,7 +866,8 @@ export const AdminDashboard = () => {
                 </label>
                 {couriers.length === 0 ? (
                   <p className="text-xs text-slate-500 py-2">
-                    No couriers registered yet. Please add couriers under User Management.
+                    No couriers registered yet. Please add couriers under User
+                    Management.
                   </p>
                 ) : (
                   <select
@@ -822,7 +879,8 @@ export const AdminDashboard = () => {
                     <option value="">-- Choose Courier --</option>
                     {couriers.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.user?.name || c.id} ({c.vehicleType || 'Motorcycle'}) — {c.activeDeliveries || 0} active orders
+                        {c.user?.name || c.id} ({c.vehicleType || "Motorcycle"})
+                        — {c.activeDeliveries || 0} active orders
                       </option>
                     ))}
                   </select>
@@ -842,7 +900,7 @@ export const AdminDashboard = () => {
                   disabled={submittingAssign || !selectedCourierId}
                   className="px-4 py-2 rounded-xl bg-blue-600 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition"
                 >
-                  {submittingAssign ? 'Assigning...' : 'Confirm Assignment'}
+                  {submittingAssign ? "Assigning..." : "Confirm Assignment"}
                 </button>
               </div>
             </form>
@@ -869,7 +927,9 @@ function DailyLineChart({ data = [], loading = false }) {
     return (
       <div className="h-56 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-xl">
         <Activity size={32} className="text-slate-300 mb-2" />
-        <p className="text-xs font-semibold text-slate-600">No daily delivery activity recorded</p>
+        <p className="text-xs font-semibold text-slate-600">
+          No daily delivery activity recorded
+        </p>
         <p className="text-[11px] text-slate-400 mt-0.5">
           New delivery transactions will appear here in real-time.
         </p>
@@ -877,7 +937,9 @@ function DailyLineChart({ data = [], loading = false }) {
     );
   }
 
-  const counts = data.map((d) => Number(d.totalDeliveries ?? d.count ?? d.total ?? 0));
+  const counts = data.map((d) =>
+    Number(d.totalDeliveries ?? d.count ?? d.total ?? 0),
+  );
   const maxVal = Math.max(5, ...counts);
   const minVal = 0;
 
@@ -900,14 +962,17 @@ function DailyLineChart({ data = [], loading = false }) {
 
   const pathD = points.reduce((acc, p, i) => {
     return i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`;
-  }, '');
+  }, "");
 
   const areaD = `${pathD} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`;
 
   return (
     <div className="w-full overflow-x-auto">
       <div className="min-w-[500px]">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56 overflow-visible">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="w-full h-56 overflow-visible"
+        >
           <defs>
             <linearGradient id="blueLineGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#2563EB" stopOpacity="0.22" />
@@ -958,10 +1023,10 @@ function DailyLineChart({ data = [], loading = false }) {
 
           {/* Points & Date labels */}
           {points.map((p, i) => {
-            const labelStr = p.date.includes('-')
+            const labelStr = p.date.includes("-")
               ? new Date(`${p.date}T00:00:00`).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
+                  month: "short",
+                  day: "numeric",
                 })
               : p.date;
 
@@ -1012,14 +1077,14 @@ function DailyLineChart({ data = [], loading = false }) {
 // SVG STATUS DONUT CHART
 // ========================================
 const STATUS_COLORS = {
-  DELIVERED: '#16A34A',
-  SUCCESSFUL: '#16A34A',
-  COMPLETED: '#16A34A',
-  IN_TRANSIT: '#2563EB',
-  PENDING: '#F59E0B',
-  ASSIGNED: '#6366F1',
-  FAILED: '#DC2626',
-  CANCELLED: '#94A3B8',
+  DELIVERED: "#16A34A",
+  SUCCESSFUL: "#16A34A",
+  COMPLETED: "#16A34A",
+  IN_TRANSIT: "#2563EB",
+  PENDING: "#F59E0B",
+  ASSIGNED: "#6366F1",
+  FAILED: "#DC2626",
+  CANCELLED: "#94A3B8",
 };
 
 function StatusDonutChart({ statuses = [], total = 0, loading = false }) {
@@ -1035,7 +1100,9 @@ function StatusDonutChart({ statuses = [], total = 0, loading = false }) {
     return (
       <div className="h-56 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-xl">
         <Package size={32} className="text-slate-300 mb-2" />
-        <p className="text-xs font-semibold text-slate-600">No status data available</p>
+        <p className="text-xs font-semibold text-slate-600">
+          No status data available
+        </p>
         <p className="text-[11px] text-slate-400 mt-0.5">
           Delivery status counts will appear once orders are placed.
         </p>
@@ -1050,13 +1117,16 @@ function StatusDonutChart({ statuses = [], total = 0, loading = false }) {
   const validStatuses = statuses
     .map((s) => {
       const count = Number(s.count ?? s.total ?? 0);
-      const pct = s.percentage !== undefined
-        ? Number(s.percentage)
-        : total > 0
-        ? (count / total) * 100
-        : 0;
-      const key = String(s.status || '').toUpperCase().replace(/\s+/g, '_');
-      const color = STATUS_COLORS[key] || '#3B82F6';
+      const pct =
+        s.percentage !== undefined
+          ? Number(s.percentage)
+          : total > 0
+            ? (count / total) * 100
+            : 0;
+      const key = String(s.status || "")
+        .toUpperCase()
+        .replace(/\s+/g, "_");
+      const color = STATUS_COLORS[key] || "#3B82F6";
       const offset = accumulated;
       accumulated += (pct / 100) * circumference;
       return {
@@ -1114,14 +1184,17 @@ function StatusDonutChart({ statuses = [], total = 0, loading = false }) {
       {/* Legend */}
       <div className="w-full space-y-2 pt-2 border-t border-slate-100">
         {validStatuses.map((item) => (
-          <div key={item.key} className="flex items-center justify-between text-xs">
+          <div
+            key={item.key}
+            className="flex items-center justify-between text-xs"
+          >
             <div className="flex items-center gap-2">
               <span
                 className="h-2.5 w-2.5 rounded-full shrink-0"
                 style={{ backgroundColor: item.color }}
               />
               <span className="text-slate-700 font-medium">
-                {item.status?.replace(/_/g, ' ') || 'Unknown'}
+                {item.status?.replace(/_/g, " ") || "Unknown"}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -1155,30 +1228,40 @@ function WeeklyBarChart({ data = [], loading = false }) {
     return (
       <div className="h-56 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-xl">
         <BarChart3 size={32} className="text-slate-300 mb-2" />
-        <p className="text-xs font-semibold text-slate-600">No performance data available</p>
+        <p className="text-xs font-semibold text-slate-600">
+          No performance data available
+        </p>
         <p className="text-[11px] text-slate-400 mt-0.5">
-          Weekly volume will calculate automatically based on recorded dispatches.
+          Weekly volume will calculate automatically based on recorded
+          dispatches.
         </p>
       </div>
     );
   }
 
-  const counts = data.map((d) => Number(d.totalDeliveries ?? d.count ?? d.total ?? 0));
+  const counts = data.map((d) =>
+    Number(d.totalDeliveries ?? d.count ?? d.total ?? 0),
+  );
   const maxVal = Math.max(5, ...counts);
 
   return (
     <div className="h-56 flex items-end justify-between gap-3 pt-6 px-2">
       {data.map((item, idx) => {
-        const count = Number(item.totalDeliveries ?? item.count ?? item.total ?? 0);
+        const count = Number(
+          item.totalDeliveries ?? item.count ?? item.total ?? 0,
+        );
         const heightPct = Math.max(6, (count / maxVal) * 100);
         const dayLabel = item.date
           ? new Date(`${item.date}T00:00:00`).toLocaleDateString(undefined, {
-              weekday: 'short',
+              weekday: "short",
             })
           : `Day ${idx + 1}`;
 
         return (
-          <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
+          <div
+            key={idx}
+            className="flex-1 flex flex-col items-center h-full justify-end group"
+          >
             {/* Value tooltip */}
             <span className="text-[10px] font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">
               {count}
@@ -1197,6 +1280,74 @@ function WeeklyBarChart({ data = [], loading = false }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// LOCATION LIST
+function LocationList({ title, locations = [], loading }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center gap-2">
+        <MapPin size={18} className="text-blue-600" />
+        <h3 className="font-bold text-slate-900">{title}</h3>
+      </div>
+
+      {loading ? (
+        <LoadingText />
+      ) : locations.length === 0 ? (
+        <EmptyText text="No location information available." />
+      ) : (
+        <div className="space-y-3">
+          {locations.slice(0, 5).map((item, index) => (
+            <div
+              key={index}
+              className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0"
+            >
+              <span className="text-xs text-slate-700">
+                {item.location ||
+                  item.address ||
+                  item.city ||
+                  item.name ||
+                  "Unknown location"}
+              </span>
+
+              <strong className="text-xs text-slate-900">
+                {item.count ?? item.total ?? 0}
+              </strong>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// SMALL METRIC
+function Metric({ label, value, prefix = "" }) {
+  return (
+    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <span className="text-xs text-slate-500">{label}</span>
+      <strong className="text-sm text-slate-900">
+        {value != null ? `${prefix}${Number(value).toLocaleString()}` : "—"}
+      </strong>
+    </div>
+  );
+}
+
+function LoadingText() {
+  return (
+    <div className="flex min-h-32 items-center justify-center gap-2 text-xs text-slate-400">
+      <RefreshCw size={16} className="animate-spin" />
+      Loading data...
+    </div>
+  );
+}
+
+function EmptyText({ text }) {
+  return (
+    <div className="flex min-h-32 items-center justify-center text-center text-xs text-slate-400">
+      {text}
     </div>
   );
 }
