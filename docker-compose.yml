@@ -30,6 +30,9 @@ services:
   parcel-service:
     build: ./backend/parcel-service
     environment:
+      PARCEL_DB_URL: ${PARCEL_DB_URL:-${AUTH_DB_URL}}
+      PARCEL_DB_USERNAME: ${PARCEL_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
+      PARCEL_DB_PASSWORD: ${PARCEL_DB_PASSWORD:-${AUTH_DB_PASSWORD}}
       SPRING_DATASOURCE_URL: ${PARCEL_DB_URL:-${AUTH_DB_URL}}
       SPRING_DATASOURCE_USERNAME: ${PARCEL_DB_USER:-${AUTH_DB_USER:-swiftdrop}}
       SPRING_DATASOURCE_PASSWORD: ${PARCEL_DB_PASSWORD:-${AUTH_DB_PASSWORD}}

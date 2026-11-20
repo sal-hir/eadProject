@@ -143,6 +143,14 @@ public class ParcelService {
                     .toList();
         }
 
+        if ("COURIER".equalsIgnoreCase(caller.role())) {
+            return parcelRepository
+                    .findByAssignedCourierIdOrderByCreatedAtDesc(caller.id())
+                    .stream()
+                    .map(this::mapToResponse)
+                    .toList();
+        }
+
         throw new ResponseStatusException(
                 HttpStatus.FORBIDDEN,
                 "Your role cannot access parcel bookings"
@@ -230,6 +238,7 @@ public class ParcelService {
                 parcel.getParcelId(),
                 parcel.getCustomerId(),
                 parcel.getMerchantId(),
+                parcel.getAssignedCourierId(),
                 parcel.getPickupAddress(),
                 parcel.getDropoffAddress(),
                 parcel.getPickupZoneId(),
@@ -359,7 +368,9 @@ public class ParcelService {
 
         return switch (current) {
             case ASSIGNED_TO_COURIER ->
-                    next == ParcelStatus.PENDING_PICKUP;
+                    next == ParcelStatus.PENDING_PICKUP
+                            || next == ParcelStatus.PICKED_UP
+                            || next == ParcelStatus.FAILED;
 
             case PENDING_PICKUP ->
                     next == ParcelStatus.PICKED_UP
@@ -412,6 +423,23 @@ public class ParcelService {
                         caller.role()
                 )
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<ParcelResponse> getAssignedParcelsForCourier(IdentityGateway.Caller caller) {
+        requireRole(caller, "COURIER", "ADMIN", "DISPATCHER");
+        if ("ADMIN".equalsIgnoreCase(caller.role()) || "DISPATCHER".equalsIgnoreCase(caller.role())) {
+            return parcelRepository.findAll()
+                    .stream()
+                    .filter(p -> p.getAssignedCourierId() != null)
+                    .map(this::mapToResponse)
+                    .toList();
+        }
+        return parcelRepository
+                .findByAssignedCourierIdOrderByCreatedAtDesc(caller.id())
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
     }
 
     @Transactional(readOnly = true)

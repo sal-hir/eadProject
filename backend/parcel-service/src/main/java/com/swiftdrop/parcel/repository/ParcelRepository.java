@@ -15,4 +15,6 @@ public interface ParcelRepository extends JpaRepository<Parcel, UUID> {
     List<Parcel> findByCustomerIdOrderByCreatedAtDesc(UUID customerId);
 
     List<Parcel> findByMerchantIdOrderByCreatedAtDesc(UUID merchantId);
+
+    List<Parcel> findByAssignedCourierIdOrderByCreatedAtDesc(UUID assignedCourierId);
 }
