@@ -3,12 +3,12 @@ WORKDIR /build
 COPY pom.xml .
 RUN mvn -B -ntp dependency:go-offline
 COPY src ./src
-RUN mvn -B -ntp package -DskipTests
+RUN mvn -B -ntp package -Dmaven.test.skip=true
 
 FROM eclipse-temurin:21-jre-alpine
 RUN addgroup -S app && adduser -S app -G app
 WORKDIR /app
 COPY --from=build --chown=app:app /build/target/tracking-service-0.1.0.jar app.jar
 USER app
-EXPOSE 4003
+EXPOSE 4004
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]

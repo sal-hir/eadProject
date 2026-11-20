@@ -1,8 +1,7 @@
-
 package com.swiftdrop.parcel.config;
 
 import com.swiftdrop.parcel.client.IdentityGateway;
-import com.swiftdrop.parcel.Security.IdentityFilter;
+import com.swiftdrop.parcel.security.IdentityFilter;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,70 +21,77 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-        @Bean
-        public SecurityFilterChain securityFilterChain(
-                        HttpSecurity http,
-                        IdentityGateway identities) throws Exception {
+    @Bean
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            IdentityGateway identities
+    ) throws Exception {
 
-                IdentityFilter identityFilter = new IdentityFilter(identities);
+        IdentityFilter identityFilter = new IdentityFilter(identities);
 
-                http
-                                .cors(cors -> {
-                                })
-                                .csrf(csrf -> csrf.disable())
-                                .formLogin(form -> form.disable())
-                                .httpBasic(basic -> basic.disable())
+        http
+                .cors(cors -> {})
+                .csrf(csrf -> csrf.disable())
+                .formLogin(form -> form.disable())
+                .httpBasic(basic -> basic.disable())
 
-                                .sessionManagement(session -> session.sessionCreationPolicy(
-                                                SessionCreationPolicy.STATELESS))
+                .sessionManagement(session ->
+                        session.sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS
+                        )
+                )
 
-                                .authorizeHttpRequests(auth -> auth
-                                                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                                                .requestMatchers(
-                                                                "/actuator/health",
-                                                                "/actuator/health/**")
-                                                .permitAll()
-                                                .requestMatchers(
-                                                                "/api/v1/parcels/tracking/**",
-                                                                "/api/v1/parcels/all" // newly added for
-                                                                                      // dispatch-service
-                                                ).permitAll()
-                                                .anyRequest().authenticated())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(
+                                "/actuator/health",
+                                "/actuator/health/**"
+                        ).permitAll()
+                        .requestMatchers(
+                                "/api/v1/parcels/tracking/**",
+                                "/api/v1/parcels/all"
+                        ).permitAll()
+                        .anyRequest().authenticated()
+                )
 
-                                .addFilterBefore(
-                                                identityFilter,
-                                                UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(
+                        identityFilter,
+                        UsernamePasswordAuthenticationFilter.class
+                );
 
-                return http.build();
+        return http.build();
+    }
 
-        }
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
 
-        @Bean
-        public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration cors = new CorsConfiguration();
 
-                CorsConfiguration cors = new CorsConfiguration();
+        cors.setAllowedOrigins(List.of(
+                "http://localhost:3000",
+                "http://127.0.0.1:3000"
+        ));
 
-                cors.setAllowedOrigins(List.of(
-                                "http://localhost:3000",
-                                "http://127.0.0.1:3000"));
+        cors.setAllowedMethods(List.of(
+                "GET", "POST", "PUT", "PATCH",
+                "DELETE", "OPTIONS"
+        ));
 
-                cors.setAllowedMethods(List.of(
-                                "GET", "POST", "PUT", "PATCH",
-                                "DELETE", "OPTIONS"));
+        cors.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Requested-With"
+        ));
 
-                cors.setAllowedHeaders(List.of(
-                                "Authorization",
-                                "Content-Type",
-                                "Accept",
-                                "Origin",
-                                "X-Requested-With"));
+        cors.setAllowCredentials(true);
 
-                cors.setAllowCredentials(true);
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
 
-                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", cors);
 
-                source.registerCorsConfiguration("/**", cors);
-
-                return source;
-        }
+        return source;
+    }
 }

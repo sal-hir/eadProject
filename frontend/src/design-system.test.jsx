@@ -7,6 +7,7 @@ import { PortalLayout, TopNavbar, navigationFor } from './layouts/SharedLayouts'
 
 let role = 'CUSTOMER';
 const logout = vi.fn();
+vi.mock('./context/NotificationCenterContext', () => ({ useNotificationCenter: () => ({ notifications: [], unreadCount: 0 }) }));
 vi.mock('./context/AuthContext', () => ({ useAuth: () => ({ user: { name: 'Test user', role }, isAuthenticated: true, logout }) }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -15,6 +16,7 @@ describe('shared design foundation', () => {
     role = current;
     render(<MemoryRouter><PortalLayout><h1>Portal content</h1></PortalLayout></MemoryRouter>);
     expect(screen.getByRole('main').textContent).toContain('Portal content');
+    expect(screen.getByRole('button', { name: 'Notifications, 0 unread' })).toBeTruthy();
     expect(screen.queryAllByRole('link', { name: 'User accounts' }).length).toBe(current === 'ADMIN' ? 1 : 0);
   });
   it('does not invent navigation for an unknown role', () => { expect(navigationFor('UNKNOWN')).toEqual([]); });

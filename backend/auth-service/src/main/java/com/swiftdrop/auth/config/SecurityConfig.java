@@ -89,6 +89,7 @@ public class SecurityConfig {
                 .requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/api/v1/auth/admin/me").hasAnyRole("ADMIN", "DISPATCHER")
                 .requestMatchers("/api/v1/auth/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/auth/internal/merchant-api/identity").permitAll()
                 .requestMatchers("/api/v1/auth/internal/**").hasRole("ADMIN")
                 .anyRequest().authenticated())
             .exceptionHandling(e -> e

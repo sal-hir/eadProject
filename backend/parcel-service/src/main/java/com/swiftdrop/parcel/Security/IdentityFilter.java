@@ -1,5 +1,5 @@
 
-package com.swiftdrop.parcel.Security;
+package com.swiftdrop.parcel.security;
 
 import com.swiftdrop.parcel.client.IdentityGateway;
 import com.swiftdrop.parcel.exception.ApiFailure;

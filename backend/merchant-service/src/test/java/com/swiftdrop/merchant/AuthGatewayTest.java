@@ -25,18 +25,18 @@ class AuthGatewayTest {
     }
     @AfterEach void stop(){auth.stop(0);}
     @Test void forwardsBearerAndPrivateCredentialOverHttpAndValidatesResponse(){
-        var gateway=new AuthGateway(base,key);assertThat(gateway.validate("opaque-verified-by-auth").id()).isEqualTo(id);
+        var gateway=new AuthGateway(base,key,false);assertThat(gateway.validate("opaque-verified-by-auth").id()).isEqualTo(id);
         gateway.grantMerchant("opaque-verified-by-auth",UUID.randomUUID(),id);
         assertThatThrownBy(()->gateway.grantMerchant("opaque-verified-by-auth",UUID.randomUUID(),UUID.randomUUID())).isInstanceOf(ApiFailure.class);
     }
     @Test void invalidOrRevokedBearerAndAuthOutageFailClosed(){
-        var gateway=new AuthGateway(base,key);
+        var gateway=new AuthGateway(base,key,false);
         assertThatThrownBy(()->gateway.validate("forged")).isInstanceOfSatisfying(ApiFailure.class,e->assertThat(e.status()).isEqualTo(401));
         status.set(503);assertThatThrownBy(()->gateway.validate("opaque-verified-by-auth")).isInstanceOfSatisfying(ApiFailure.class,e->assertThat(e.status()).isEqualTo(503));
         assertThatThrownBy(()->gateway.grantMerchant("opaque-verified-by-auth",UUID.randomUUID(),id)).isInstanceOf(ApiFailure.class);
     }
     @Test void requiresHttpsOutsideLocalhostAndConfiguredServiceKey(){
-        assertThatThrownBy(()->new AuthGateway("http://auth.example.com",key)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(()->new AuthGateway(base,"").grantMerchant("opaque-verified-by-auth",UUID.randomUUID(),id)).isInstanceOf(ApiFailure.class);
+        assertThatThrownBy(()->new AuthGateway("http://auth.example.com",key,false)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->new AuthGateway(base,"",false).grantMerchant("opaque-verified-by-auth",UUID.randomUUID(),id)).isInstanceOf(ApiFailure.class);
     }
 }
