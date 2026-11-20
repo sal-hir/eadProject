@@ -25,6 +25,10 @@ export const COURIER_API_BASE_URL = (
   import.meta.env.VITE_COURIER_API_URL || 'http://localhost:4003'
 ).replace(/\/$/, '');
 
+export const TRACKING_API_BASE_URL = (
+  import.meta.env.VITE_TRACKING_API_URL || 'http://localhost:4003'
+).replace(/\/$/, '');
+
 
 // ========================================
 // IN-MEMORY AUTHENTICATION
@@ -126,6 +130,12 @@ export const adminApi = createServiceClient(ADMIN_API_BASE_URL);
 // ========================================
 
 export const courierApi = createServiceClient(COURIER_API_BASE_URL);
+
+// ========================================
+// TRACKING SERVICE CLIENT
+// ========================================
+
+export const trackingApi = createServiceClient(TRACKING_API_BASE_URL);
 
 
 // ========================================
@@ -286,6 +296,8 @@ installAuthentication(parcelApi);
 installAuthentication(adminApi);
 
 installAuthentication(courierApi);
+
+installAuthentication(trackingApi);
 
 
 // ========================================
