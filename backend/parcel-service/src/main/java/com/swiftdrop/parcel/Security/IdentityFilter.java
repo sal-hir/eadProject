@@ -1,4 +1,3 @@
-
 package com.swiftdrop.parcel.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,17 +29,24 @@ public class IdentityFilter extends OncePerRequestFilter {
         this.mapper = mapper;
     }
 
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-
+    private boolean isPublic(HttpServletRequest request) {
+        String uri = request.getRequestURI();
         String path = request.getServletPath();
-
-        return request.getMethod().equals("OPTIONS")
-                || path.equals("/actuator/health")
-                || path.startsWith("/actuator/health/")
-                || path.startsWith("/api/v1/parcels/tracking/");
+        return "OPTIONS".equalsIgnoreCase(request.getMethod())
+                || (uri != null && uri.equals("/actuator/health"))
+                || (uri != null && uri.startsWith("/actuator/health/"))
+                || (uri != null && uri.startsWith("/api/v1/parcels/tracking/"))
+                || (uri != null && uri.equals("/api/v1/info"))
+                || (path != null && path.equals("/actuator/health"))
+                || (path != null && path.startsWith("/actuator/health/"))
+                || (path != null && path.startsWith("/api/v1/parcels/tracking/"))
+                || (path != null && path.equals("/api/v1/info"));
     }
 
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return isPublic(request);
+    }
 
     @Override
     protected void doFilterInternal(
@@ -48,6 +54,11 @@ public class IdentityFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
+
+        if (isPublic(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
 

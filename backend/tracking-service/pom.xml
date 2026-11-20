@@ -91,9 +91,18 @@
 
   <build>
     <plugins>
+      <!-- Generates META-INF/build-info.properties so the /api/v1/info endpoint
+           can read the artifact version compiled from the POM. -->
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>build-info</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

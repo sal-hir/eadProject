@@ -62,7 +62,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/actuator/health",
                                 "/actuator/health/**",
-                                "/actuator/info"
+                                "/actuator/info",
+                                "/api/v1/info"           // <-- add this
                         ).permitAll()
                         .requestMatchers(
                                 "/actuator/metrics",
