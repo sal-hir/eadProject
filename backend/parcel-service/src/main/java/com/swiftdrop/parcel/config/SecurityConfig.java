@@ -1,5 +1,6 @@
 package com.swiftdrop.parcel.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.parcel.client.IdentityGateway;
 import com.swiftdrop.parcel.security.IdentityFilter;
 
@@ -24,10 +25,11 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            IdentityGateway identities
+            IdentityGateway identities,
+            ObjectMapper objectMapper
     ) throws Exception {
 
-        IdentityFilter identityFilter = new IdentityFilter(identities);
+        IdentityFilter identityFilter = new IdentityFilter(identities, objectMapper);
 
         http
                 .cors(cors -> {})
