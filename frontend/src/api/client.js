@@ -26,7 +26,7 @@ export const COURIER_API_BASE_URL = (
 ).replace(/\/$/, '');
 
 export const TRACKING_API_BASE_URL = (
-  import.meta.env.VITE_TRACKING_API_URL || 'http://localhost:4003'
+  import.meta.env.VITE_TRACKING_API_URL || 'http://localhost:4004'
 ).replace(/\/$/, '');
 
 
