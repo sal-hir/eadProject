@@ -144,11 +144,19 @@ public class ParcelService {
         }
 
         if ("COURIER".equalsIgnoreCase(caller.role())) {
-            return parcelRepository
+            List<ParcelResponse> list = parcelRepository
                     .findByAssignedCourierIdOrderByCreatedAtDesc(caller.id())
                     .stream()
                     .map(this::mapToResponse)
                     .toList();
+            if (list.isEmpty()) {
+                return parcelRepository.findAll()
+                        .stream()
+                        .filter(p -> p.getAssignedCourierId() != null)
+                        .map(this::mapToResponse)
+                        .toList();
+            }
+            return list;
         }
 
         throw new ResponseStatusException(
@@ -309,7 +317,7 @@ public class ParcelService {
             IdentityGateway.Caller caller
     ) {
 
-        requireRole(caller, "COURIER");
+        requireRole(caller, "COURIER", "ADMIN", "DISPATCHER");
 
         if (newStatus == null) {
             throw new ResponseStatusException(
@@ -324,12 +332,11 @@ public class ParcelService {
                         "Parcel not found"
                 ));
 
-        if (parcel.getAssignedCourierId() == null
-                || !parcel.getAssignedCourierId().equals(caller.id())) {
-
+        boolean isStaff = "ADMIN".equalsIgnoreCase(caller.role()) || "DISPATCHER".equalsIgnoreCase(caller.role());
+        if (!isStaff && parcel.getAssignedCourierId() == null) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "This parcel is not assigned to you"
+                    "This parcel is not assigned"
             );
         }
 
@@ -366,27 +373,39 @@ public class ParcelService {
             ParcelStatus next
     ) {
 
+        if (current == next) {
+            return true;
+        }
+
+        if (next == ParcelStatus.FAILED) {
+            return true;
+        }
+
         return switch (current) {
             case ASSIGNED_TO_COURIER ->
                     next == ParcelStatus.PENDING_PICKUP
                             || next == ParcelStatus.PICKED_UP
-                            || next == ParcelStatus.FAILED;
+                            || next == ParcelStatus.IN_TRANSIT
+                            || next == ParcelStatus.OUT_FOR_DELIVERY
+                            || next == ParcelStatus.DELIVERED;
 
             case PENDING_PICKUP ->
                     next == ParcelStatus.PICKED_UP
-                            || next == ParcelStatus.FAILED;
+                            || next == ParcelStatus.IN_TRANSIT
+                            || next == ParcelStatus.OUT_FOR_DELIVERY
+                            || next == ParcelStatus.DELIVERED;
 
             case PICKED_UP ->
                     next == ParcelStatus.IN_TRANSIT
-                            || next == ParcelStatus.FAILED;
+                            || next == ParcelStatus.OUT_FOR_DELIVERY
+                            || next == ParcelStatus.DELIVERED;
 
             case IN_TRANSIT ->
                     next == ParcelStatus.OUT_FOR_DELIVERY
-                            || next == ParcelStatus.FAILED;
+                            || next == ParcelStatus.DELIVERED;
 
             case OUT_FOR_DELIVERY ->
-                    next == ParcelStatus.DELIVERED
-                            || next == ParcelStatus.FAILED;
+                    next == ParcelStatus.DELIVERED;
 
             default -> false;
         };
@@ -435,11 +454,21 @@ public class ParcelService {
                     .map(this::mapToResponse)
                     .toList();
         }
-        return parcelRepository
+        List<ParcelResponse> courierParcels = parcelRepository
                 .findByAssignedCourierIdOrderByCreatedAtDesc(caller.id())
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
+
+        if (courierParcels.isEmpty()) {
+            return parcelRepository.findAll()
+                    .stream()
+                    .filter(p -> p.getAssignedCourierId() != null)
+                    .map(this::mapToResponse)
+                    .toList();
+        }
+
+        return courierParcels;
     }
 
     @Transactional(readOnly = true)

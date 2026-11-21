@@ -189,17 +189,10 @@ export const CourierDashboard = () => {
     setModalError("");
 
     try {
-      let updatedSuccessfully = false;
-
       // 1. Update status via parcel-service endpoint
-      try {
-        await parcelApi.patch(`/parcels/${selectedParcel.id}/status`, {
-          status: newStatus,
-        });
-        updatedSuccessfully = true;
-      } catch (pErr) {
-        console.warn("parcel-service status patch note:", pErr);
-      }
+      await parcelApi.patch(`/parcels/${selectedParcel.id}/status`, {
+        status: newStatus,
+      });
 
       // 2. Also sync status with courier-service if available
       try {
@@ -212,26 +205,20 @@ export const CourierDashboard = () => {
             failureReason: newStatus === "FAILED" ? failureReason : undefined,
           }
         );
-        updatedSuccessfully = true;
       } catch (cErr) {
         // Ignored if parcel-service handled it
       }
 
-      if (updatedSuccessfully) {
-        setSelectedParcel(null);
-        fetchDeliveries();
-      } else {
-        throw new Error("Failed to update status on services");
-      }
+      setSelectedParcel(null);
+      await fetchDeliveries();
     } catch (err) {
       console.error("Status update error:", err);
-      // Fallback optimistic update on UI so demo/presentation never breaks
-      setDeliveries((prev) =>
-        prev.map((p) =>
-          p.id === selectedParcel.id ? { ...p, status: newStatus } : p
-        )
-      );
-      setSelectedParcel(null);
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to update status on server";
+      setModalError(errMsg);
     } finally {
       setUpdating(false);
     }
@@ -326,10 +313,19 @@ export const CourierDashboard = () => {
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
           <Truck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-800">
-            No deliveries assigned
+            {filterStatus ? "No parcels matching selected filter" : "No deliveries assigned"}
           </h3>
           <p className="text-slate-500 text-sm mt-1">
-            Check back later or wait for dispatch assignments.
+            {filterStatus ? (
+              <button
+                onClick={() => setFilterStatus("")}
+                className="text-amber-600 underline font-semibold mt-1 inline-block"
+              >
+                Clear filter and view all assigned parcels
+              </button>
+            ) : (
+              "Check back later or wait for dispatch assignments."
+            )}
           </p>
         </div>
       ) : (

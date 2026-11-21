@@ -1,4 +1,4 @@
-import { trackingApi, TRACKING_API_BASE_URL } from './client';
+import { trackingApi, parcelApi, TRACKING_API_BASE_URL } from './client';
 
 export class PublicServiceError extends Error {
   constructor(kind, message) {
@@ -108,26 +108,75 @@ const localAiAnswer = (prompt) => {
   };
 };
 
+const statusLocationMap = {
+  CREATED: 'Shipment created at origin facility',
+  ASSIGNED_TO_COURIER: 'Assigned to delivery courier',
+  PENDING_PICKUP: 'Awaiting courier pickup',
+  PICKED_UP: 'Parcel collected from sender',
+  IN_TRANSIT: 'In transit through sorting hub',
+  OUT_FOR_DELIVERY: 'Out for final delivery with courier',
+  DELIVERED: 'Delivered to recipient',
+  FAILED: 'Delivery attempt unsuccessful'
+};
+
 export const publicServices = {
   /**
    * Fetches public tracking details for a parcel.
    * Strips all PII and returns public-safe delivery stages.
+   * Resiliently queries trackingApi or parcelApi with demo fallback.
    */
   track: async (trackingNumber) => {
     const normalized = normalizeTrackingNumber(trackingNumber);
+
+    // 1. First try Member 3's tracking service if running
     try {
       const response = await trackingApi.get(`/tracking/${encodeURIComponent(normalized)}`);
-      return response.data;
+      if (response?.data) {
+        return response.data;
+      }
     } catch (err) {
       if (err.response?.status === 404) {
+        // If 404 in tracking service, still check parcel-service
+      }
+    }
+
+    // 2. Query real parcel-service (PostgreSQL Neon database)
+    try {
+      const pRes = await parcelApi.get(`/parcels/tracking/${encodeURIComponent(normalized)}`);
+      if (pRes?.data) {
+        const d = pRes.data;
+        const events = (d.statusHistory || []).map((h) => ({
+          status: h.status,
+          timestamp: h.changedAt,
+          city: statusLocationMap[h.status] || 'Sorting Hub'
+        }));
+
+        return {
+          trackingNumber: d.trackingNumber,
+          status: d.currentStatus || 'IN_TRANSIT',
+          originCity: d.originCity || 'Colombo Hub',
+          destinationCity: d.destinationCity || 'Destination Area',
+          updatedAt: events.length > 0 ? events[events.length - 1].timestamp : d.createdAt,
+          events: events.length > 0 ? events : [
+            { status: d.currentStatus || 'CREATED', timestamp: d.createdAt, city: 'Colombo Hub' }
+          ]
+        };
+      }
+    } catch (pErr) {
+      if (pErr.response?.status === 404) {
+        if (demoShipments[normalized]) {
+          return demoShipments[normalized];
+        }
         throw new PublicServiceError('not-found', 'No parcel found matching this tracking reference.');
       }
-      // If backend is currently not running, provide demo shipments seamlessly for presentation
-      if (demoShipments[normalized]) {
-        return demoShipments[normalized];
-      }
-      throw new PublicServiceError('network', 'Could not reach the tracking service.');
     }
+
+    // 3. Fallback to demo shipments for presentation
+    if (demoShipments[normalized]) {
+      return demoShipments[normalized];
+    }
+
+    throw new PublicServiceError('network', 'Could not reach the tracking service.');
   },
 
   /**
@@ -144,6 +193,22 @@ export const publicServices = {
     } catch (err) {
       // Backend not running or connection error -> use intelligent fallback
     }
+
+    // Check if user is asking to track a specific tracking number
+    const match = message.match(/(SWIFT-[A-Z0-9-]+|[A-Z0-9]{8,})/i);
+    if (match) {
+      try {
+        const parcel = await publicServices.track(match[1]);
+        if (parcel) {
+          return {
+            success: true,
+            reply: `📦 **Live Tracking Details for ${parcel.trackingNumber}**\n\n- **Current Status:** \`${parcel.status}\`\n- **Route:** ${parcel.originCity} ➔ ${parcel.destinationCity}\n- **Latest Update:** ${parcel.updatedAt ? new Date(parcel.updatedAt).toLocaleString() : 'Recently updated'}\n\nYou can also view the full delivery timeline on our tracking page!`,
+            toolsInvoked: ['trackParcel']
+          };
+        }
+      } catch (_) {}
+    }
+
     return localAiAnswer(message);
   },
 
