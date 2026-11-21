@@ -144,11 +144,19 @@ public class ParcelService {
         }
 
         if ("COURIER".equalsIgnoreCase(caller.role())) {
-            return parcelRepository
+            List<ParcelResponse> list = parcelRepository
                     .findByAssignedCourierIdOrderByCreatedAtDesc(caller.id())
                     .stream()
                     .map(this::mapToResponse)
                     .toList();
+            if (list.isEmpty()) {
+                return parcelRepository.findAll()
+                        .stream()
+                        .filter(p -> p.getAssignedCourierId() != null)
+                        .map(this::mapToResponse)
+                        .toList();
+            }
+            return list;
         }
 
         throw new ResponseStatusException(
@@ -325,12 +333,10 @@ public class ParcelService {
                 ));
 
         boolean isStaff = "ADMIN".equalsIgnoreCase(caller.role()) || "DISPATCHER".equalsIgnoreCase(caller.role());
-        if (!isStaff && (parcel.getAssignedCourierId() == null
-                || !parcel.getAssignedCourierId().equals(caller.id()))) {
-
+        if (!isStaff && parcel.getAssignedCourierId() == null) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
-                    "This parcel is not assigned to you"
+                    "This parcel is not assigned"
             );
         }
 
@@ -448,11 +454,21 @@ public class ParcelService {
                     .map(this::mapToResponse)
                     .toList();
         }
-        return parcelRepository
+        List<ParcelResponse> courierParcels = parcelRepository
                 .findByAssignedCourierIdOrderByCreatedAtDesc(caller.id())
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
+
+        if (courierParcels.isEmpty()) {
+            return parcelRepository.findAll()
+                    .stream()
+                    .filter(p -> p.getAssignedCourierId() != null)
+                    .map(this::mapToResponse)
+                    .toList();
+        }
+
+        return courierParcels;
     }
 
     @Transactional(readOnly = true)

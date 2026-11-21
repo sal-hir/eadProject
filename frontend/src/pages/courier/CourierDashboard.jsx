@@ -313,10 +313,19 @@ export const CourierDashboard = () => {
         <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
           <Truck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-800">
-            No deliveries assigned
+            {filterStatus ? "No parcels matching selected filter" : "No deliveries assigned"}
           </h3>
           <p className="text-slate-500 text-sm mt-1">
-            Check back later or wait for dispatch assignments.
+            {filterStatus ? (
+              <button
+                onClick={() => setFilterStatus("")}
+                className="text-amber-600 underline font-semibold mt-1 inline-block"
+              >
+                Clear filter and view all assigned parcels
+              </button>
+            ) : (
+              "Check back later or wait for dispatch assignments."
+            )}
           </p>
         </div>
       ) : (
