@@ -39,6 +39,7 @@ public class IdentityFilter extends OncePerRequestFilter {
         // Skip mandatory Bearer check for health, info, and preflight requests
         boolean isPublicPath = request.getRequestURI().startsWith("/actuator/health")
                 || request.getRequestURI().startsWith("/actuator/info")
+                || request.getRequestURI().equals("/api/v1/info")
                 || "OPTIONS".equals(request.getMethod());
 
         // Get Authorization header

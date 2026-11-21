@@ -74,6 +74,19 @@ function startHttpServer() {
       return;
     }
 
+    // GET /api/v1/info - Public system info endpoint (no auth required)
+    if (req.method === 'GET' && req.url === '/api/v1/info') {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({
+        applicationName: 'notification-service',
+        description: 'SwiftDrop Notification Consumer - Email and SMS Event Processor',
+        version: '1.0.0',
+        apiVersion: 'v1',
+        status: isConsumerHealthy ? 'UP' : 'DEGRADED',
+        timestamp: new Date().toISOString(),
+      }));
+      return;
+    }
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Not found' }));
   });
