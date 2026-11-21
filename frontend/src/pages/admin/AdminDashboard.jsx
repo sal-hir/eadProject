@@ -52,6 +52,7 @@ export const AdminDashboard = () => {
   const [deliveryStatuses, setDeliveryStatuses] = useState([]);
   const [zones, setZones] = useState([]);
   const [pricingRules, setPricingRules] = useState([]);
+  const [recentParcels, setRecentParcels] = useState([]);
 
   // Courier Service
   const [couriers, setCouriers] = useState([]);
