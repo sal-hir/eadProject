@@ -189,17 +189,10 @@ export const CourierDashboard = () => {
     setModalError("");
 
     try {
-      let updatedSuccessfully = false;
-
       // 1. Update status via parcel-service endpoint
-      try {
-        await parcelApi.patch(`/parcels/${selectedParcel.id}/status`, {
-          status: newStatus,
-        });
-        updatedSuccessfully = true;
-      } catch (pErr) {
-        console.warn("parcel-service status patch note:", pErr);
-      }
+      await parcelApi.patch(`/parcels/${selectedParcel.id}/status`, {
+        status: newStatus,
+      });
 
       // 2. Also sync status with courier-service if available
       try {
@@ -212,26 +205,20 @@ export const CourierDashboard = () => {
             failureReason: newStatus === "FAILED" ? failureReason : undefined,
           }
         );
-        updatedSuccessfully = true;
       } catch (cErr) {
         // Ignored if parcel-service handled it
       }
 
-      if (updatedSuccessfully) {
-        setSelectedParcel(null);
-        fetchDeliveries();
-      } else {
-        throw new Error("Failed to update status on services");
-      }
+      setSelectedParcel(null);
+      await fetchDeliveries();
     } catch (err) {
       console.error("Status update error:", err);
-      // Fallback optimistic update on UI so demo/presentation never breaks
-      setDeliveries((prev) =>
-        prev.map((p) =>
-          p.id === selectedParcel.id ? { ...p, status: newStatus } : p
-        )
-      );
-      setSelectedParcel(null);
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to update status on server";
+      setModalError(errMsg);
     } finally {
       setUpdating(false);
     }
