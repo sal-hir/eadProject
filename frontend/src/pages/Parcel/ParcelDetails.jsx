@@ -91,8 +91,9 @@ const [receiptError, setReceiptError] = useState('');
       `/parcels/${parcel.parcelId}/receipt`,
       {
         responseType: 'blob',
-        Accept: {'application/pdf',
-                },
+        headers: {
+          Accept: 'application/pdf',
+        },
       }
     );
 
