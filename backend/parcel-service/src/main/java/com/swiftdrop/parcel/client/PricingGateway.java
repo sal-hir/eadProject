@@ -35,7 +35,7 @@ public class PricingGateway {
     public List<ZoneData> getZones(String token) {
         try {
             String response = client.get()
-                    .uri("/api/v1/pricing/zones")
+                    .uri("/api/v1/admin/pricing/zones")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .retrieve()
                     .body(String.class);
@@ -63,7 +63,7 @@ public class PricingGateway {
         try {
             return client.get()
                     .uri(uriBuilder -> uriBuilder
-                            .path("/api/v1/pricing/quote")
+                            .path("/api/v1/admin/pricing/quote")
                             .queryParam("zoneId", zoneId)
                             .queryParam("weightKg", weightKg)
                             .build())
