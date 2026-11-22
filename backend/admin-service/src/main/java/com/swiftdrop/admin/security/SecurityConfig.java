@@ -3,6 +3,7 @@ package com.swiftdrop.admin.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.admin.client.IdentityGateway;
 import com.swiftdrop.admin.exception.ApiErrors;
+import org.springframework.http.HttpMethod;
 
 import java.util.List;
 
@@ -68,6 +69,11 @@ public class SecurityConfig {
                                 "/actuator/metrics",
                                 "/actuator/metrics/**"
                         ).hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/zones").authenticated()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/admin/pricing/quote"
+                                ).authenticated()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
