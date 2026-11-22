@@ -1,7 +1,8 @@
-
 package com.swiftdrop.parcel.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.parcel.client.IdentityGateway;
+import com.swiftdrop.parcel.exception.ApiErrors;
 import com.swiftdrop.parcel.exception.ApiFailure;
 
 import jakarta.servlet.FilterChain;
@@ -21,22 +22,31 @@ import java.util.List;
 public class IdentityFilter extends OncePerRequestFilter {
 
     private final IdentityGateway identities;
+    private final ObjectMapper mapper;
 
-    public IdentityFilter(IdentityGateway identities) {
+    public IdentityFilter(IdentityGateway identities, ObjectMapper mapper) {
         this.identities = identities;
+        this.mapper = mapper;
+    }
+
+    private boolean isPublic(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        String path = request.getServletPath();
+        return "OPTIONS".equalsIgnoreCase(request.getMethod())
+                || (uri != null && uri.equals("/actuator/health"))
+                || (uri != null && uri.startsWith("/actuator/health/"))
+                || (uri != null && uri.startsWith("/api/v1/parcels/tracking/"))
+                || (uri != null && uri.equals("/api/v1/info"))
+                || (path != null && path.equals("/actuator/health"))
+                || (path != null && path.startsWith("/actuator/health/"))
+                || (path != null && path.startsWith("/api/v1/parcels/tracking/"))
+                || (path != null && path.equals("/api/v1/info"));
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-
-        String path = request.getServletPath();
-
-        return request.getMethod().equals("OPTIONS")
-                || path.equals("/actuator/health")
-                || path.startsWith("/actuator/health/")
-                || path.startsWith("/api/v1/parcels/tracking/");
+        return isPublic(request);
     }
-
 
     @Override
     protected void doFilterInternal(
@@ -45,17 +55,22 @@ public class IdentityFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
+        if (isPublic(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
 
         if (authorization == null || !authorization.startsWith("Bearer ")) {
-            writeError(response, 401, "Authentication required");
+            ApiErrors.write(mapper, response, 401, "Authentication required");
             return;
         }
 
         String token = authorization.substring(7).trim();
 
         if (token.isEmpty()) {
-            writeError(response, 401, "Authentication required");
+            ApiErrors.write(mapper, response, 401, "Authentication required");
             return;
         }
 
@@ -79,29 +94,13 @@ public class IdentityFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.clearContext();
 
-            writeError(
-                    response,
-                    exception.status(),
-                    exception.getMessage()
-            );
+            ApiErrors.write(mapper, response, exception.status(), exception.getMessage());
+
+        } catch (Exception e) {
+
+            SecurityContextHolder.clearContext();
+
+            ApiErrors.write(mapper, response, 503, "Authentication unavailable");
         }
-    }
-
-    private void writeError(
-            HttpServletResponse response,
-            int status,
-            String message
-    ) throws IOException {
-
-        response.setStatus(status);
-        response.setContentType("application/json");
-        response.setCharacterEncoding("UTF-8");
-
-        String safeMessage = message.replace("\\", "\\\\")
-                .replace("\"", "\\\"");
-
-        response.getWriter().write(
-                "{\"success\":false,\"message\":\"" + safeMessage + "\"}"
-        );
     }
 }

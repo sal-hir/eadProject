@@ -31,7 +31,8 @@ public class OpenApiEndpointTest {
                 .andExpect(jsonPath("$.info.title", containsString("Tracking")))
                 .andExpect(jsonPath("$.paths['/api/v1/tracking/{trackingNumber}'].get", notNullValue()))
                 .andExpect(jsonPath("$.paths['/api/v1/tracking/{trackingNumber}/stream'].get", notNullValue()))
-                .andExpect(jsonPath("$.paths['/api/v1/ai/chat'].post", notNullValue()));
+                .andExpect(jsonPath("$.paths['/api/v1/ai/chat'].post", notNullValue()))
+                .andExpect(jsonPath("$.paths['/api/v1/info'].get", notNullValue()));
     }
 
     @Test
