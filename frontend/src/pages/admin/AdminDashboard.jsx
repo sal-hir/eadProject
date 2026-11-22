@@ -1,5 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from 'react';
+
 import { Link } from 'react-router-dom';
+
 import {
   Package,
   CheckCircle2,
@@ -9,7 +16,6 @@ import {
   TrendingDown,
   RefreshCw,
   Search,
-  Bell,
   MapPin,
   DollarSign,
   Users,
@@ -17,643 +23,656 @@ import {
   BarChart3,
   ArrowUpRight,
   ChevronRight,
-  Truck,
-  Shield,
-  Layers,
-  Calendar,
   X,
-  ExternalLink,
   Activity,
   Check,
   Send,
   Copy,
-  Zap,
-  Radio,
+  Truck,
 } from 'lucide-react';
+
 import { api } from '../../api/client';
-import { analyticsApi, zoneApi, pricingApi } from '../../api/adminApi';
+import { dispatchAnalyticsApi } from '../../api/dispatchApi';
+import { zoneApi, pricingApi } from '../../api/adminApi';
 import { StatusBadge } from '../../components/StatusBadge';
 import { Modal } from '../../components/ui';
+
+const unwrap = (response) =>
+  response?.data?.data ?? response?.data ?? null;
+
+const toList = (data, keys = []) => {
+  if (Array.isArray(data)) return data;
+  if (!data) return [];
+
+  for (const key of keys) {
+    if (Array.isArray(data[key])) return data[key];
+  }
+
+  return [];
+};
+
+const getDailyCount = (item) =>
+  Number(
+    item.totalParcels ??
+    item.totalDeliveries ??
+    item.count ??
+    item.total ??
+    0
+  );
 
 export const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [parcelFilter, setParcelFilter] = useState('ALL');
   const [copiedTracking, setCopiedTracking] = useState('');
 
-  // Analytics & Operational Data
+  // Dispatch analytics
   const [overview, setOverview] = useState(null);
   const [dailyDeliveries, setDailyDeliveries] = useState([]);
   const [deliveryStatuses, setDeliveryStatuses] = useState([]);
+  const [recentParcels, setRecentParcels] = useState([]);
+  const [pickupLocations, setPickupLocations] = useState([]);
+  const [dropoffLocations, setDropoffLocations] = useState([]);
+  const [feeAnalytics, setFeeAnalytics] = useState(null);
+
+  // Admin Service
   const [zones, setZones] = useState([]);
   const [pricingRules, setPricingRules] = useState([]);
-  const [recentParcels, setRecentParcels] = useState([]);
+
+  // Courier Service
   const [couriers, setCouriers] = useState([]);
 
-  // Assignment Modal
+  // Assignment modal
   const [assigningParcel, setAssigningParcel] = useState(null);
   const [selectedCourierId, setSelectedCourierId] = useState('');
   const [submittingAssign, setSubmittingAssign] = useState(false);
   const [assignSuccess, setAssignSuccess] = useState('');
   const [assignError, setAssignError] = useState('');
 
-  // Date formatted
-  const formattedToday = useMemo(() => {
-    return new Date().toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  }, []);
+  const formattedToday = useMemo(
+    () =>
+      new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+    []
+  );
 
+  // Load dashboard information
   const fetchDashboardData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
-    const today = new Date();
-    const fromDate = new Date();
-    fromDate.setDate(today.getDate() - 6);
+    const requests = [
+      // Dispatch Service
+      dispatchAnalyticsApi.getOverview(),
+      dispatchAnalyticsApi.getDaily(),
+      dispatchAnalyticsApi.getStatus(),
+      dispatchAnalyticsApi.getRecent(10),
+      dispatchAnalyticsApi.getPickupLocations(),
+      dispatchAnalyticsApi.getDropoffLocations(),
+      dispatchAnalyticsApi.getFees(),
 
-    const fromStr = fromDate.toISOString().split('T')[0];
-    const toStr = today.toISOString().split('T')[0];
-
-    const results = await Promise.allSettled([
-      analyticsApi.getOverview(),
-      analyticsApi.getDailyDeliveries(fromStr, toStr),
-      analyticsApi.getDeliveryStatus(),
+      // Admin Service
       zoneApi.getAll(),
       pricingApi.getAll(),
-      api.get('/parcels', { params: { limit: 10 } }),
+
+      // Existing Courier API
       api.get('/couriers'),
-    ]);
+    ];
 
-    // Overview
-    if (results[0].status === 'fulfilled') {
-      const payload = results[0].value?.data?.data ?? results[0].value?.data;
-      setOverview(payload || null);
-    } else {
-      setOverview(null);
+    try {
+      const results = await Promise.allSettled(requests);
+
+      const read = (index) =>
+        results[index].status === 'fulfilled'
+          ? unwrap(results[index].value)
+          : null;
+
+      // Dispatch overview
+      setOverview(read(0));
+
+      // Daily parcel statistics
+      setDailyDeliveries(
+        toList(read(1), [
+          'items',
+          'dailyParcels',
+          'dailyDeliveries',
+          'content',
+        ])
+      );
+
+      // Parcel status statistics
+      setDeliveryStatuses(
+        toList(read(2), [
+          'items',
+          'statuses',
+          'deliveryStatuses',
+          'content',
+        ])
+      );
+
+      // Recent parcels
+      setRecentParcels(
+        toList(read(3), [
+          'parcels',
+          'items',
+          'content',
+        ])
+      );
+
+      // Pickup locations
+      setPickupLocations(
+        toList(read(4), [
+          'locations',
+          'items',
+          'content',
+        ])
+      );
+
+      // Drop-off locations
+      setDropoffLocations(
+        toList(read(5), [
+          'locations',
+          'items',
+          'content',
+        ])
+      );
+
+      // Fee analytics
+      setFeeAnalytics(read(6));
+
+      // Zones
+      setZones(
+        toList(read(7), [
+          'zones',
+          'items',
+          'content',
+        ])
+      );
+
+      // Pricing
+      setPricingRules(
+        toList(read(8), [
+          'pricingRules',
+          'items',
+          'content',
+        ])
+      );
+
+      // Couriers
+      setCouriers(
+        toList(read(9), [
+          'couriers',
+          'items',
+          'content',
+        ])
+      );
+
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error(
+            `Dashboard request ${index + 1} failed:`,
+            result.reason
+          );
+        }
+      });
+    } catch (error) {
+      console.error('Dashboard loading error:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    // Daily Deliveries
-    if (results[1].status === 'fulfilled') {
-      const payload = results[1].value?.data?.data ?? results[1].value?.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.items || payload?.deliveries || payload?.dailyDeliveries || [];
-      setDailyDeliveries(list);
-    } else {
-      setDailyDeliveries([]);
-    }
-
-    // Statuses
-    if (results[2].status === 'fulfilled') {
-      const payload = results[2].value?.data?.data ?? results[2].value?.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.items || payload?.statuses || payload?.deliveryStatuses || [];
-      setDeliveryStatuses(list);
-    } else {
-      setDeliveryStatuses([]);
-    }
-
-    // Zones
-    if (results[3].status === 'fulfilled') {
-      const payload = results[3].value?.data?.data ?? results[3].value?.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.content || payload?.zones || [];
-      setZones(list);
-    } else {
-      setZones([]);
-    }
-
-    // Pricing
-    if (results[4].status === 'fulfilled') {
-      const payload = results[4].value?.data?.data ?? results[4].value?.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.content || payload?.items || [];
-      setPricingRules(list);
-    } else {
-      setPricingRules([]);
-    }
-
-    // Recent Parcels
-    if (results[5].status === 'fulfilled') {
-      const payload = results[5].value?.data?.data ?? results[5].value?.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.parcels || payload?.content || [];
-      setRecentParcels(list);
-    } else {
-      setRecentParcels([]);
-    }
-
-    // Couriers
-    if (results[6].status === 'fulfilled') {
-      const payload = results[6].value?.data?.data ?? results[6].value?.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.couriers || [];
-      setCouriers(list);
-    } else {
-      setCouriers([]);
-    }
-
-    setLoading(false);
-    setRefreshing(false);
   }, []);
 
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // Derived KPI values
-  const totalParcels = Number(
-    overview?.totalDeliveries ??
-    overview?.total ??
-    recentParcels.length ??
-    0
-  );
-
-  const deliveredParcels = Number(
-    overview?.successfulDeliveries ??
-    overview?.successful ??
-    overview?.completed ??
-    0
-  );
-
-  const failedParcels = Number(
-    overview?.failedDeliveries ??
-    overview?.failed ??
-    0
-  );
-
-  const pendingParcels = Number(
-    overview?.pendingDeliveries ??
-    overview?.pending ??
-    Math.max(0, totalParcels - deliveredParcels - failedParcels)
-  );
+  // KPI values from Dispatch Service
+  const totalParcels = Number(overview?.totalParcels ?? 0);
+  const deliveredParcels = Number(overview?.deliveredParcels ?? 0);
+  const failedParcels = Number(overview?.failedParcels ?? 0);
+  const pendingParcels = Number(overview?.pendingParcels ?? 0);
 
   const successRate =
-    overview?.successRate !== undefined
-      ? Number(overview.successRate).toFixed(1)
-      : totalParcels > 0
+    totalParcels > 0
       ? ((deliveredParcels / totalParcels) * 100).toFixed(1)
       : '0.0';
 
   const failureRate =
-    overview?.failureRate !== undefined
-      ? Number(overview.failureRate)
-      : totalParcels > 0
+    totalParcels > 0
       ? ((failedParcels / totalParcels) * 100).toFixed(1)
       : '0.0';
 
   // Copy tracking number
-  const handleCopyTracking = (num) => {
-    navigator.clipboard.writeText(num);
-    setCopiedTracking(num);
-    setTimeout(() => setCopiedTracking(''), 2500);
+  const handleCopyTracking = async (trackingNumber) => {
+    try {
+      await navigator.clipboard.writeText(trackingNumber);
+      setCopiedTracking(trackingNumber);
+
+      setTimeout(() => {
+        setCopiedTracking('');
+      }, 2500);
+    } catch (error) {
+      console.error('Unable to copy tracking number:', error);
+    }
   };
 
-  // Handle Assigning
-  const handleAssignSubmit = async (e) => {
-    e.preventDefault();
+  // Assign courier
+  const handleAssignSubmit = async (event) => {
+    event.preventDefault();
+
     if (!assigningParcel || !selectedCourierId) return;
 
     setSubmittingAssign(true);
     setAssignError('');
+
     try {
-      const res = await api.patch(`/parcels/${assigningParcel.id}/assign`, {
+      // IMPORTANT:
+      // Verify this URL and parcel ID with your actual assignment controller.
+      // Use the Parcel Service UUID (sourceParcelId), not Dispatch's internal ID.
+      const parcelId =
+        assigningParcel.sourceParcelId ||
+        assigningParcel.parcelId;
+
+      if (!parcelId) {
+        throw new Error(
+          'The source Parcel Service ID is missing from this parcel.'
+        );
+      }
+
+      await api.patch(`/parcels/${parcelId}/assignment`, {
         courierId: selectedCourierId,
       });
-      if (res.data?.success || res.status === 200) {
-        setAssignSuccess(`Assigned parcel ${assigningParcel.trackingNumber} successfully!`);
-        setTimeout(() => setAssignSuccess(''), 4000);
-        setAssigningParcel(null);
-        setSelectedCourierId('');
-        fetchDashboardData(true);
-      }
-    } catch (err) {
+
+      setAssignSuccess(
+        `Courier assigned to ${assigningParcel.trackingNumber} successfully.`
+      );
+
+      setAssigningParcel(null);
+      setSelectedCourierId('');
+
+      setTimeout(() => setAssignSuccess(''), 4000);
+
+      fetchDashboardData(true);
+    } catch (error) {
       setAssignError(
-        err.response?.data?.message || err.message || 'Failed to assign courier.'
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to assign courier.'
       );
     } finally {
       setSubmittingAssign(false);
     }
   };
 
-  // Filtered parcels by search query and category
+  // Filter recent parcels
   const filteredParcels = useMemo(() => {
     let list = recentParcels;
 
     if (parcelFilter === 'IN_TRANSIT') {
-      list = list.filter((p) => p.status === 'IN_TRANSIT' || p.status === 'ASSIGNED');
-    } else if (parcelFilter === 'DELIVERED') {
-      list = list.filter((p) => p.status === 'DELIVERED' || p.status === 'COMPLETED');
-    } else if (parcelFilter === 'UNASSIGNED') {
-      list = list.filter((p) => !p.courierId && p.status !== 'DELIVERED');
+      list = list.filter(
+        (parcel) =>
+          parcel.status === 'IN_TRANSIT' ||
+          parcel.status === 'ASSIGNED'
+      );
+    }
+
+    if (parcelFilter === 'DELIVERED') {
+      list = list.filter(
+        (parcel) =>
+          parcel.status === 'DELIVERED' ||
+          parcel.status === 'COMPLETED'
+      );
+    }
+
+    if (parcelFilter === 'UNASSIGNED') {
+      list = list.filter(
+        (parcel) =>
+          !parcel.courierId &&
+          parcel.status !== 'DELIVERED'
+      );
     }
 
     if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(
-      (p) =>
-        p.trackingNumber?.toLowerCase().includes(q) ||
-        p.recipientName?.toLowerCase().includes(q) ||
-        p.dropoffCity?.toLowerCase().includes(q) ||
-        p.pickupCity?.toLowerCase().includes(q) ||
-        p.status?.toLowerCase().includes(q)
+
+    const query = searchQuery.toLowerCase();
+
+    return list.filter((parcel) =>
+      [
+        parcel.trackingNumber,
+        parcel.recipientName,
+        parcel.dropoffCity,
+        parcel.pickupCity,
+        parcel.pickupAddress,
+        parcel.dropoffAddress,
+        parcel.status,
+      ].some((value) =>
+        String(value ?? '').toLowerCase().includes(query)
+      )
     );
-  }, [recentParcels, searchQuery, parcelFilter]);
+  }, [recentParcels, parcelFilter, searchQuery]);
+
+  // Match assigned courier
+  const getCourierName = (parcel) => {
+    const courier = couriers.find(
+      (item) =>
+        String(item.id) === String(parcel.courierId)
+    );
+
+    return (
+      parcel.courier?.user?.name ||
+      courier?.user?.name ||
+      courier?.name ||
+      'Assigned'
+    );
+  };
 
   return (
     <section className="space-y-6 pb-12">
-      {/* 1. WELCOME & TOP ACTION HEADER */}
+
+      {/* HEADER */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1.5">
-            {/* Hidden for test accessibility requirement while preserving visual hierarchy */}
+          <div className="space-y-2">
             <h1 className="sr-only">Administration</h1>
+
             <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-              </span>
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Logistics Telemetry Active • {formattedToday}
+                Logistics Telemetry Active · {formattedToday}
               </p>
             </div>
-            <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-              Welcome back, <span className="text-blue-600">Administrator</span>
+
+            <h2 className="text-2xl font-extrabold text-slate-900 sm:text-3xl">
+              Welcome back,{' '}
+              <span className="text-blue-600">Administrator</span>
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 max-w-2xl">
-              Island-wide courier routing, delivery fulfillment telemetry, coverage zones, and revenue tariffs.
+
+            <p className="max-w-2xl text-sm text-slate-500">
+              Monitor parcels, courier operations, delivery statistics,
+              coverage zones and pricing.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* Quick Search */}
-            <div className="relative min-w-[220px] flex-1 sm:flex-initial">
+            <div className="relative min-w-[220px] flex-1">
               <Search
                 size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
               />
+
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search parcels or tracking..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-8 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search parcels..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs focus:border-blue-600 focus:outline-none"
               />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X size={14} />
-                </button>
-              )}
             </div>
 
-            {/* Sync Telemetry */}
             <button
               type="button"
               onClick={() => fetchDashboardData(true)}
               disabled={refreshing}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-100 transition disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
             >
               <RefreshCw
                 size={14}
-                className={refreshing ? 'animate-spin text-blue-600' : 'text-slate-500'}
+                className={refreshing ? 'animate-spin' : ''}
               />
-              <span>{refreshing ? 'Syncing...' : 'Sync Data'}</span>
+              {refreshing ? 'Syncing...' : 'Sync Data'}
             </button>
 
-            {/* Quick Action Link */}
             <Link
               to="/admin/zones"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-blue-500/20 hover:bg-blue-700 transition"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700"
             >
               <MapPin size={14} />
-              <span>Zone Manager</span>
+              Zone Manager
             </Link>
           </div>
         </div>
       </div>
 
+      {/* ASSIGNMENT SUCCESS */}
       {assignSuccess && (
         <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-            <span>{assignSuccess}</span>
-          </div>
-          <button onClick={() => setAssignSuccess('')} className="text-emerald-600 hover:text-emerald-800">
+          <span className="flex items-center gap-2">
+            <CheckCircle2 size={16} />
+            {assignSuccess}
+          </span>
+
+          <button onClick={() => setAssignSuccess('')}>
             <X size={14} />
           </button>
         </div>
       )}
 
-      {/* 2. DASHBOARD KPI CARDS */}
+      {/* KPI CARDS */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* KPI 1: Total Parcels */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Total Parcels
-              </p>
-              <p className="text-3xl font-extrabold text-slate-900">
-                {loading ? '—' : Number(totalParcels).toLocaleString()}
-              </p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 shadow-sm shadow-blue-500/10">
-              <Package size={24} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
-            <span className="font-semibold text-blue-600">All-Time Volume</span>
-            <span className="text-[11px] text-slate-400">Total recorded</span>
-          </div>
-        </div>
 
-        {/* KPI 2: Delivered Parcels */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Delivered Parcels
-              </p>
-              <p className="text-3xl font-extrabold text-emerald-600">
-                {loading ? '—' : Number(deliveredParcels).toLocaleString()}
-              </p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-sm shadow-emerald-500/10">
-              <CheckCircle2 size={24} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
-            <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full text-[11px]">
-              <TrendingUp size={12} />
-              {successRate}% Success
-            </span>
-            <span className="text-[11px] text-slate-400">Completed safely</span>
-          </div>
-        </div>
+        <KpiCard
+          title="Total Parcels"
+          value={totalParcels}
+          loading={loading}
+          icon={<Package size={24} />}
+          color="blue"
+          footer="All-time parcel volume"
+        />
 
-        {/* KPI 3: Pending Deliveries */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Pending Deliveries
-              </p>
-              <p className="text-3xl font-extrabold text-amber-500">
-                {loading ? '—' : Number(pendingParcels).toLocaleString()}
-              </p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 shadow-sm shadow-amber-500/10">
-              <Clock size={24} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
-            <span className="font-semibold text-amber-600">In Transit & Assigned</span>
-            <span className="text-[11px] text-slate-400">Active drop-offs</span>
-          </div>
-        </div>
+        <KpiCard
+          title="Delivered Parcels"
+          value={deliveredParcels}
+          loading={loading}
+          icon={<CheckCircle2 size={24} />}
+          color="green"
+          footer={`${successRate}% success rate`}
+        />
 
-        {/* KPI 4: Failed Deliveries */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Failed Deliveries
-              </p>
-              <p className="text-3xl font-extrabold text-rose-600">
-                {loading ? '—' : Number(failedParcels).toLocaleString()}
-              </p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 shadow-sm shadow-rose-500/10">
-              <AlertTriangle size={24} />
-            </div>
-          </div>
-          <div className="mt-4 flex items-center justify-between text-xs text-slate-500 pt-3 border-t border-slate-100">
-            <span className="inline-flex items-center gap-1 font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full text-[11px]">
-              <TrendingDown size={12} />
-              {failureRate}% Rate
-            </span>
-            <span className="text-[11px] text-slate-400">Requires review</span>
-          </div>
-        </div>
+        <KpiCard
+          title="Pending Parcels"
+          value={pendingParcels}
+          loading={loading}
+          icon={<Clock size={24} />}
+          color="amber"
+          footer="Not yet completed"
+        />
+
+        <KpiCard
+          title="Failed Parcels"
+          value={failedParcels}
+          loading={loading}
+          icon={<AlertTriangle size={24} />}
+          color="rose"
+          footer={`${failureRate}% failure rate`}
+        />
       </div>
 
-      {/* 3. CHARTS ROW */}
+      {/* CHARTS */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Chart 1: Daily Delivery Activity (Line Chart) */}
+
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
+          <div className="mb-5 flex items-center justify-between">
             <div>
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
-                  <Activity size={18} />
-                </div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Daily Delivery Activity
-                </h3>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Volume of parcel dispatches across island-wide zones over recent dates
+              <h3 className="font-bold text-slate-900">
+                Daily Parcel Creation
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Parcel creation volume by date
               </p>
             </div>
 
             <Link
               to="/admin/analytics"
-              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 self-start sm:self-auto"
+              className="flex items-center gap-1 text-xs font-bold text-blue-600"
             >
-              <span>View Full Analytics</span>
-              <ArrowUpRight size={14} />
+              Full Analytics <ArrowUpRight size={14} />
             </Link>
           </div>
 
-          <DailyLineChart data={dailyDeliveries} loading={loading} />
+          <DailyLineChart
+            data={dailyDeliveries}
+            loading={loading}
+          />
         </div>
 
-        {/* Chart 2: Parcel Status Distribution (Donut Chart) */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Parcel Status Distribution
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Breakdown of active delivery states
-                </p>
-              </div>
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="font-bold text-slate-900">
+            Parcel Status Distribution
+          </h3>
 
-            <StatusDonutChart
-              statuses={deliveryStatuses}
-              total={totalParcels}
-              loading={loading}
+          <p className="mt-1 text-xs text-slate-500">
+            Breakdown by current status
+          </p>
+
+          <StatusDonutChart
+            statuses={deliveryStatuses}
+            total={totalParcels}
+            loading={loading}
+          />
+        </div>
+      </div>
+
+      {/* WEEKLY CHART AND OPERATIONS */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <h3 className="font-bold text-slate-900">
+            Weekly Parcel Performance
+          </h3>
+
+          <p className="mt-1 text-xs text-slate-500">
+            Daily parcel creation comparison
+          </p>
+
+          <WeeklyBarChart
+            data={dailyDeliveries}
+            loading={loading}
+          />
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="mb-1 font-bold text-slate-900">
+            Quick Actions
+          </h3>
+
+          <p className="mb-5 text-xs text-slate-500">
+            Administrative modules
+          </p>
+
+          <div className="space-y-3">
+            <Shortcut
+              to="/admin/zones"
+              title="Zone Management"
+              description={`${zones.length} zones loaded`}
+              icon={<MapPin size={20} />}
+            />
+
+            <Shortcut
+              to="/admin/pricing"
+              title="Pricing Management"
+              description={`${pricingRules.length} pricing rules loaded`}
+              icon={<DollarSign size={20} />}
+            />
+
+            <Shortcut
+              to="/admin/users"
+              title="User Management"
+              description="Manage staff and permissions"
+              icon={<Users size={20} />}
+            />
+
+            <Shortcut
+              to="/admin/merchants"
+              title="Merchant Management"
+              description="Review merchant accounts"
+              icon={<Store size={20} />}
             />
           </div>
         </div>
       </div>
 
-      {/* 4. WEEKLY PERFORMANCE BAR CHART & SHORTCUTS */}
+      {/* OPERATIONAL ANALYTICS */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Weekly Delivery Performance (Bar Chart) */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Weekly Delivery Performance
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Daily load comparison and dispatch fulfillment
-              </p>
-            </div>
-            <span className="text-xs font-semibold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
-              Recent 7 Days
-            </span>
-          </div>
 
-          <WeeklyBarChart data={dailyDeliveries} loading={loading} />
-        </div>
+        <LocationList
+          title="Popular Pickup Locations"
+          locations={pickupLocations}
+          loading={loading}
+        />
 
-        {/* Quick Actions & Navigation Shortcuts */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 mb-1">
-              Quick Actions & Shortcuts
+        <LocationList
+          title="Popular Drop-off Locations"
+          locations={dropoffLocations}
+          loading={loading}
+        />
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <DollarSign size={19} className="text-emerald-600" />
+            <h3 className="font-bold text-slate-900">
+              Delivery Fee Analytics
             </h3>
-            <p className="text-xs text-slate-500 mb-5">
-              Direct access to core administrative modules
-            </p>
+          </div>
 
-            <div className="space-y-3">
-              {/* Shortcut 1: Zone Management */}
-              <Link
-                to="/admin/zones"
-                className="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-blue-50/50 hover:border-blue-200 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform">
-                    <MapPin size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                      Zone Management
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      {zones.length > 0 ? `${zones.length} active coverage zones` : 'Manage delivery boundaries'}
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
-              </Link>
+          {loading ? (
+            <LoadingText />
+          ) : feeAnalytics ? (
+            <div className="space-y-4">
+              <Metric
+                label="Total Fees"
+                value={feeAnalytics.totalFees ?? feeAnalytics.totalRevenue}
+                prefix="LKR "
+              />
 
-              {/* Shortcut 2: Pricing Management */}
-              <Link
-                to="/admin/pricing"
-                className="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-blue-50/50 hover:border-blue-200 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-                    <DollarSign size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                      Pricing Management
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      {pricingRules.length > 0 ? `${pricingRules.length} rate rules active` : 'Configure weight tariffs'}
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
-              </Link>
+              <Metric
+                label="Average Fee"
+                value={feeAnalytics.averageFee}
+                prefix="LKR "
+              />
 
-              {/* Shortcut 3: User Accounts */}
-              <Link
-                to="/admin/users"
-                className="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-blue-50/50 hover:border-blue-200 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-white shadow-sm group-hover:scale-105 transition-transform">
-                    <Users size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                      User Management
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      Staff identities, couriers & permissions
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
-              </Link>
-
-              {/* Shortcut 4: Merchant Applications */}
-              <Link
-                to="/admin/merchants"
-                className="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 hover:bg-blue-50/50 hover:border-blue-200 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm shadow-amber-500/20 group-hover:scale-105 transition-transform">
-                    <Store size={20} />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                      Merchant Applications
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      Review business verification requests
-                    </p>
-                  </div>
-                </div>
-                <ChevronRight size={16} className="text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
-              </Link>
+              <Metric
+                label="Total Transactions"
+                value={feeAnalytics.totalTransactions ?? feeAnalytics.totalParcels}
+              />
             </div>
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-            <span>Platform Service Status</span>
-            <span className="inline-flex items-center gap-1.5 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Operational
-            </span>
-          </div>
+          ) : (
+            <EmptyText text="No fee analytics available." />
+          )}
         </div>
       </div>
 
-      {/* 5. RECENT PARCEL ACTIVITIES TABLE */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* RECENT PARCEL TABLE */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="font-bold text-slate-900">
                 Recent Parcel Activities
               </h3>
-              <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700">
+
+              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">
                 {filteredParcels.length} Items
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Live updates from active parcels, routing status, and dispatch assignments
+
+            <p className="mt-1 text-xs text-slate-500">
+              Recent parcels and courier assignments
             </p>
           </div>
 
-          {/* Filter Pills */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-2">
             {[
-              { id: 'ALL', label: 'All Orders' },
+              { id: 'ALL', label: 'All' },
               { id: 'IN_TRANSIT', label: 'In Transit' },
               { id: 'DELIVERED', label: 'Delivered' },
               { id: 'UNASSIGNED', label: 'Unassigned' },
@@ -662,10 +681,10 @@ export const AdminDashboard = () => {
                 key={tab.id}
                 type="button"
                 onClick={() => setParcelFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                className={`rounded-xl px-3 py-2 text-xs font-semibold ${
                   parcelFilter === tab.id
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    ? 'bg-blue-600 text-white'
+                    : 'border border-slate-200 bg-slate-50 text-slate-600'
                 }`}
               >
                 {tab.label}
@@ -676,95 +695,81 @@ export const AdminDashboard = () => {
 
         {filteredParcels.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-              <Package size={24} />
-            </div>
-            <h4 className="text-sm font-bold text-slate-800">No Parcel Activities Found</h4>
-            <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-              {searchQuery
-                ? `No parcels match the search query "${searchQuery}".`
-                : 'There are currently no recorded parcel activities matching this filter.'}
+            <Package size={30} className="mx-auto mb-3 text-slate-300" />
+            <p className="text-sm font-bold text-slate-700">
+              No parcels found
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              No parcels match your current search or filter.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 text-slate-500 uppercase font-semibold border-b border-slate-200">
+              <thead className="border-b border-slate-200 bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-6 py-3.5">Tracking Number</th>
-                  <th className="px-6 py-3.5">Route</th>
-                  <th className="px-6 py-3.5">Recipient</th>
-                  <th className="px-6 py-3.5">Weight</th>
-                  <th className="px-6 py-3.5">Status</th>
-                  <th className="px-6 py-3.5 text-right">Actions</th>
+                  <th className="px-5 py-4">Tracking Number</th>
+                  <th className="px-5 py-4">Route</th>
+                  <th className="px-5 py-4">Recipient</th>
+                  <th className="px-5 py-4">Weight</th>
+                  <th className="px-5 py-4">Status</th>
                 </tr>
               </thead>
+
               <tbody className="divide-y divide-slate-100">
                 {filteredParcels.map((parcel) => (
-                  <tr key={parcel.id || parcel.trackingNumber} className="hover:bg-slate-50/60 transition">
-                    <td className="px-6 py-4 font-mono font-bold text-slate-900">
+                  <tr
+                    key={parcel.sourceParcelId || parcel.id || parcel.trackingNumber}
+                    className="hover:bg-slate-50"
+                  >
+                    <td className="px-5 py-4 font-mono font-bold text-slate-900">
                       <div className="flex items-center gap-2">
-                        <span>{parcel.trackingNumber || '—'}</span>
+                        {parcel.trackingNumber || '—'}
+
                         {parcel.trackingNumber && (
                           <button
                             type="button"
                             onClick={() => handleCopyTracking(parcel.trackingNumber)}
-                            title="Copy Tracking Number"
-                            className="text-slate-400 hover:text-blue-600 transition"
+                            title="Copy tracking number"
                           >
                             {copiedTracking === parcel.trackingNumber ? (
                               <Check size={13} className="text-emerald-600" />
                             ) : (
-                              <Copy size={13} />
+                              <Copy size={13} className="text-slate-400" />
                             )}
                           </button>
                         )}
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 text-slate-600">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <span>{parcel.pickupCity || 'Colombo'}</span>
-                        <span className="text-slate-400">→</span>
-                        <span className="text-slate-900">{parcel.dropoffCity || 'Kandy'}</span>
+                    <td className="px-5 py-4 text-slate-600">
+                      <div className="max-w-[220px]">
+                        <p className="truncate">
+                          {parcel.pickupCity || parcel.pickupAddress || '—'}
+                        </p>
+                        <p className="truncate text-slate-400">
+                          → {parcel.dropoffCity || parcel.dropoffAddress || '—'}
+                        </p>
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 text-slate-700">
-                      <div className="font-semibold text-slate-900">
-                        {parcel.recipientName || 'Recipient'}
-                      </div>
-                      <div className="text-[11px] text-slate-400">
+                    <td className="px-5 py-4">
+                      <p className="font-semibold text-slate-800">
+                        {parcel.recipientName || '—'}
+                      </p>
+                      <p className="text-slate-400">
                         {parcel.recipientPhone || '—'}
-                      </div>
+                      </p>
                     </td>
 
-                    <td className="px-6 py-4 font-medium text-slate-600">
-                      {parcel.weightKg ? `${parcel.weightKg} kg` : '—'}
+                    <td className="px-5 py-4 text-slate-600">
+                      {parcel.weightKg != null
+                        ? `${parcel.weightKg} kg`
+                        : '—'}
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-4">
                       <StatusBadge status={parcel.status || 'PENDING'} />
-                    </td>
-
-                    <td className="px-6 py-4 text-right">
-                      {(!parcel.courierId && parcel.status !== 'DELIVERED') ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAssigningParcel(parcel);
-                            setSelectedCourierId(couriers[0]?.id || '');
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition"
-                        >
-                          <Send size={12} />
-                          <span>Assign</span>
-                        </button>
-                      ) : (
-                        <span className="text-[11px] font-semibold text-slate-400">
-                          {parcel.courier?.user?.name ? `Courier: ${parcel.courier.user.name}` : 'Completed'}
-                        </span>
-                      )}
                     </td>
                   </tr>
                 ))}
@@ -774,73 +779,75 @@ export const AdminDashboard = () => {
         )}
       </div>
 
-      {/* Courier Assign Modal */}
+      {/* ASSIGN COURIER MODAL */}
       {assigningParcel && (
         <Modal
           open={Boolean(assigningParcel)}
           onClose={() => setAssigningParcel(null)}
-          title={`Assign Courier to ${assigningParcel.trackingNumber}`}
+          title={`Assign Courier - ${assigningParcel.trackingNumber}`}
         >
-          <div className="space-y-4 pt-1">
-            <div className="rounded-xl bg-slate-50 p-3.5 text-xs space-y-1 text-slate-600 border border-slate-200">
-              <div className="flex justify-between">
-                <span>Destination:</span>
-                <strong className="text-slate-900">{assigningParcel.dropoffCity}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Weight:</span>
-                <strong className="text-slate-900">{assigningParcel.weightKg || '1.0'} kg</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Recipient:</span>
-                <strong className="text-slate-900">{assigningParcel.recipientName}</strong>
-              </div>
+          <div className="space-y-4 pt-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
+              <p>
+                <strong>Pickup:</strong>{' '}
+                {assigningParcel.pickupAddress || assigningParcel.pickupCity || '—'}
+              </p>
+
+              <p className="mt-2">
+                <strong>Destination:</strong>{' '}
+                {assigningParcel.dropoffAddress || assigningParcel.dropoffCity || '—'}
+              </p>
             </div>
 
             {assignError && (
-              <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
                 {assignError}
               </div>
             )}
 
             <form onSubmit={handleAssignSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
-                  Select Available Courier
+                <label className="mb-2 block text-xs font-bold text-slate-700">
+                  Select Courier
                 </label>
-                {couriers.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-2">
-                    No couriers registered yet. Please add couriers under User Management.
-                  </p>
-                ) : (
-                  <select
-                    required
-                    value={selectedCourierId}
-                    onChange={(e) => setSelectedCourierId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs text-slate-900 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 focus:outline-none"
-                  >
-                    <option value="">-- Choose Courier --</option>
-                    {couriers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.user?.name || c.id} ({c.vehicleType || 'Motorcycle'}) — {c.activeDeliveries || 0} active orders
-                      </option>
-                    ))}
-                  </select>
-                )}
+
+                <select
+                  required
+                  value={selectedCourierId}
+                  onChange={(event) =>
+                    setSelectedCourierId(event.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-300 px-3 py-3 text-xs"
+                >
+                  <option value="">-- Choose Courier --</option>
+
+                  {couriers.map((courier) => (
+                    <option key={courier.id} value={courier.id}>
+                      {courier.user?.name || courier.name || courier.id}
+                      {' - '}
+                      {courier.vehicleType || 'Vehicle not specified'}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
                 <button
                   type="button"
                   onClick={() => setAssigningParcel(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold"
                 >
                   Cancel
                 </button>
+
                 <button
                   type="submit"
-                  disabled={submittingAssign || !selectedCourierId}
-                  className="px-4 py-2 rounded-xl bg-blue-600 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition"
+                  disabled={
+                    submittingAssign ||
+                    !selectedCourierId ||
+                    couriers.length === 0
+                  }
+                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
                 >
                   {submittingAssign ? 'Assigning...' : 'Confirm Assignment'}
                 </button>
@@ -853,285 +860,282 @@ export const AdminDashboard = () => {
   );
 };
 
-// ========================================
-// SVG LINE CHART (Daily Delivery Activity)
-// ========================================
-function DailyLineChart({ data = [], loading = false }) {
-  if (loading) {
-    return (
-      <div className="h-56 flex items-center justify-center">
-        <RefreshCw size={24} className="animate-spin text-blue-600" />
-      </div>
-    );
-  }
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="h-56 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-xl">
-        <Activity size={32} className="text-slate-300 mb-2" />
-        <p className="text-xs font-semibold text-slate-600">No daily delivery activity recorded</p>
-        <p className="text-[11px] text-slate-400 mt-0.5">
-          New delivery transactions will appear here in real-time.
-        </p>
-      </div>
-    );
-  }
-
-  const counts = data.map((d) => Number(d.totalDeliveries ?? d.count ?? d.total ?? 0));
-  const maxVal = Math.max(5, ...counts);
-  const minVal = 0;
-
-  const width = 640;
-  const height = 200;
-  const paddingX = 40;
-  const paddingY = 24;
-
-  const innerW = width - paddingX * 2;
-  const innerH = height - paddingY * 2;
-
-  const stepX = data.length > 1 ? innerW / (data.length - 1) : innerW;
-
-  const points = data.map((d, i) => {
-    const val = Number(d.totalDeliveries ?? d.count ?? d.total ?? 0);
-    const x = paddingX + i * stepX;
-    const y = height - paddingY - (val / maxVal) * innerH;
-    return { x, y, val, date: d.date || d.day || `Day ${i + 1}` };
-  });
-
-  const pathD = points.reduce((acc, p, i) => {
-    return i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`;
-  }, '');
-
-  const areaD = `${pathD} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`;
+// KPI CARD
+function KpiCard({ title, value, loading, icon, color, footer }) {
+  const styles = {
+    blue: 'bg-blue-50 text-blue-600',
+    green: 'bg-emerald-50 text-emerald-600',
+    amber: 'bg-amber-50 text-amber-600',
+    rose: 'bg-rose-50 text-rose-600',
+  };
 
   return (
-    <div className="w-full overflow-x-auto">
-      <div className="min-w-[500px]">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-56 overflow-visible">
-          <defs>
-            <linearGradient id="blueLineGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase text-slate-500">
+            {title}
+          </p>
 
-          {/* Grid lines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
-            const y = height - paddingY - pct * innerH;
-            const labelVal = Math.round(minVal + pct * (maxVal - minVal));
-            return (
-              <g key={pct}>
-                <line
-                  x1={paddingX}
-                  y1={y}
-                  x2={width - paddingX}
-                  y2={y}
-                  stroke="#F1F5F9"
-                  strokeWidth="1"
-                />
-                <text
-                  x={paddingX - 10}
-                  y={y + 3}
-                  textAnchor="end"
-                  fontSize="10"
-                  fill="#94A3B8"
-                  fontWeight="600"
-                >
-                  {labelVal}
-                </text>
-              </g>
-            );
-          })}
+          <p className="mt-2 text-3xl font-extrabold text-slate-900">
+            {loading ? '—' : Number(value).toLocaleString()}
+          </p>
+        </div>
 
-          {/* Area fill */}
-          <path d={areaD} fill="url(#blueLineGradient)" />
+        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${styles[color]}`}>
+          {icon}
+        </div>
+      </div>
 
-          {/* Line stroke */}
-          <path
-            d={pathD}
-            fill="none"
-            stroke="#2563EB"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          {/* Points & Date labels */}
-          {points.map((p, i) => {
-            const labelStr = p.date.includes('-')
-              ? new Date(`${p.date}T00:00:00`).toLocaleDateString(undefined, {
-                  month: 'short',
-                  day: 'numeric',
-                })
-              : p.date;
-
-            return (
-              <g key={i} className="group cursor-pointer">
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r="5"
-                  fill="#FFFFFF"
-                  stroke="#2563EB"
-                  strokeWidth="3"
-                  className="transition-transform group-hover:scale-125"
-                />
-                {/* Tooltip value */}
-                <text
-                  x={p.x}
-                  y={p.y - 10}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fontWeight="bold"
-                  fill="#1E293B"
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  {p.val}
-                </text>
-                {/* X axis date label */}
-                <text
-                  x={p.x}
-                  y={height - 6}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fill="#64748B"
-                  fontWeight="500"
-                >
-                  {labelStr}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+      <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+        {footer}
       </div>
     </div>
   );
 }
 
-// ========================================
-// SVG STATUS DONUT CHART
-// ========================================
+// QUICK ACTION
+function Shortcut({ to, title, description, icon }) {
+  return (
+    <Link
+      to={to}
+      className="group flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3 hover:border-blue-200 hover:bg-blue-50"
+    >
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
+          {icon}
+        </div>
+
+        <div>
+          <p className="text-xs font-bold text-slate-900">{title}</p>
+          <p className="text-[11px] text-slate-500">{description}</p>
+        </div>
+      </div>
+
+      <ChevronRight size={16} className="text-slate-400" />
+    </Link>
+  );
+}
+
+// DAILY LINE CHART
+function DailyLineChart({ data = [], loading }) {
+  if (loading) return <LoadingText />;
+
+  if (!data.length) {
+    return <EmptyText text="No daily parcel statistics available." />;
+  }
+
+  const max = Math.max(5, ...data.map(getDailyCount));
+  const width = 640;
+  const height = 210;
+  const padding = 35;
+  const innerWidth = width - padding * 2;
+  const innerHeight = height - padding * 2;
+
+  const points = data.map((item, index) => {
+    const x =
+      data.length === 1
+        ? width / 2
+        : padding + (index * innerWidth) / (data.length - 1);
+
+    const value = getDailyCount(item);
+    const y = height - padding - (value / max) * innerHeight;
+
+    return {
+      x,
+      y,
+      value,
+      date: item.date || item.day || `Day ${index + 1}`,
+    };
+  });
+
+  const path = points
+    .map((point, index) =>
+      `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`
+    )
+    .join(' ');
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-56 min-w-[500px] w-full"
+      >
+        {[0, 0.25, 0.5, 0.75, 1].map((percentage) => {
+          const y = height - padding - percentage * innerHeight;
+
+          return (
+            <line
+              key={percentage}
+              x1={padding}
+              y1={y}
+              x2={width - padding}
+              y2={y}
+              stroke="#E2E8F0"
+              strokeDasharray="4 4"
+            />
+          );
+        })}
+
+        <path
+          d={path}
+          fill="none"
+          stroke="#2563EB"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+
+        {points.map((point, index) => (
+          <g key={index}>
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="5"
+              fill="white"
+              stroke="#2563EB"
+              strokeWidth="3"
+            />
+
+            <text
+              x={point.x}
+              y={point.y - 12}
+              textAnchor="middle"
+              fontSize="10"
+              fill="#1E293B"
+            >
+              {point.value}
+            </text>
+
+            <text
+              x={point.x}
+              y={height - 5}
+              textAnchor="middle"
+              fontSize="10"
+              fill="#64748B"
+            >
+              {point.date}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// STATUS DONUT CHART
 const STATUS_COLORS = {
   DELIVERED: '#16A34A',
-  SUCCESSFUL: '#16A34A',
   COMPLETED: '#16A34A',
-  IN_TRANSIT: '#2563EB',
+  FAILED: '#DC2626',
   PENDING: '#F59E0B',
   ASSIGNED: '#6366F1',
-  FAILED: '#DC2626',
+  IN_TRANSIT: '#2563EB',
   CANCELLED: '#94A3B8',
 };
 
-function StatusDonutChart({ statuses = [], total = 0, loading = false }) {
-  if (loading) {
-    return (
-      <div className="h-56 flex items-center justify-center">
-        <RefreshCw size={24} className="animate-spin text-blue-600" />
-      </div>
-    );
+function StatusDonutChart({ statuses = [], total, loading }) {
+  if (loading) return <LoadingText />;
+
+  if (!statuses.length) {
+    return <EmptyText text="No status statistics available." />;
   }
 
-  if (!statuses || statuses.length === 0) {
-    return (
-      <div className="h-56 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-xl">
-        <Package size={32} className="text-slate-300 mb-2" />
-        <p className="text-xs font-semibold text-slate-600">No status data available</p>
-        <p className="text-[11px] text-slate-400 mt-0.5">
-          Delivery status counts will appear once orders are placed.
-        </p>
-      </div>
-    );
-  }
+  const totalCount = statuses.reduce(
+    (sum, item) =>
+      sum + Number(item.count ?? item.total ?? 0),
+    0
+  );
 
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  let accumulated = 0;
+  let offset = 0;
+  const circumference = 2 * Math.PI * 43;
 
-  const validStatuses = statuses
-    .map((s) => {
-      const count = Number(s.count ?? s.total ?? 0);
-      const pct = s.percentage !== undefined
-        ? Number(s.percentage)
-        : total > 0
-        ? (count / total) * 100
-        : 0;
-      const key = String(s.status || '').toUpperCase().replace(/\s+/g, '_');
-      const color = STATUS_COLORS[key] || '#3B82F6';
-      const offset = accumulated;
-      accumulated += (pct / 100) * circumference;
-      return {
-        ...s,
-        key,
-        count,
-        pct,
-        color,
-        offset,
-      };
-    })
-    .filter((s) => s.pct > 0 || s.count > 0);
+  const segments = statuses.map((item, index) => {
+    const count = Number(item.count ?? item.total ?? 0);
+    const percentage =
+      totalCount > 0 ? (count / totalCount) * 100 : 0;
+
+    const segment = {
+      ...item,
+      count,
+      percentage,
+      offset,
+      color:
+        STATUS_COLORS[
+          String(item.status || '').toUpperCase()
+        ] || '#3B82F6',
+    };
+
+    offset += (percentage / 100) * circumference;
+    return segment;
+  });
 
   return (
-    <div className="flex flex-col items-center gap-5 pt-2">
-      {/* SVG Donut */}
-      <div className="relative w-40 h-40">
-        <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
+    <div className="flex flex-col items-center pt-5">
+      <div className="relative h-40 w-40">
+        <svg viewBox="0 0 120 120" className="-rotate-90">
           <circle
             cx="60"
             cy="60"
-            r={radius}
+            r="43"
             fill="none"
             stroke="#F1F5F9"
             strokeWidth="14"
           />
-          {validStatuses.map((item, idx) => {
-            const length = (item.pct / 100) * circumference;
+
+          {segments.map((item, index) => {
+            const length =
+              (item.percentage / 100) * circumference;
+
             return (
               <circle
-                key={item.key || idx}
+                key={index}
                 cx="60"
                 cy="60"
-                r={radius}
+                r="43"
                 fill="none"
                 stroke={item.color}
                 strokeWidth="14"
                 strokeDasharray={`${length} ${circumference - length}`}
                 strokeDashoffset={-item.offset}
-                strokeLinecap="butt"
               />
             );
           })}
         </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-xl font-extrabold text-slate-900 leading-none">
+
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-xl font-extrabold text-slate-900">
             {Number(total).toLocaleString()}
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">
+          <span className="text-[10px] uppercase text-slate-400">
             Total
           </span>
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="w-full space-y-2 pt-2 border-t border-slate-100">
-        {validStatuses.map((item) => (
-          <div key={item.key} className="flex items-center justify-between text-xs">
+      <div className="mt-5 w-full space-y-3">
+        {segments.map((item, index) => (
+          <div
+            key={index}
+            className="flex items-center justify-between text-xs"
+          >
             <div className="flex items-center gap-2">
               <span
-                className="h-2.5 w-2.5 rounded-full shrink-0"
+                className="h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: item.color }}
               />
-              <span className="text-slate-700 font-medium">
-                {item.status?.replace(/_/g, ' ') || 'Unknown'}
+
+              <span className="text-slate-600">
+                {item.status || 'Unknown'}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900">
-                {Number(item.count).toLocaleString()}
+
+            <strong className="text-slate-900">
+              {item.count}
+              {' '}
+              <span className="font-normal text-slate-400">
+                ({item.percentage.toFixed(1)}%)
               </span>
-              <span className="text-[11px] text-slate-400">
-                ({Number(item.pct).toFixed(1)}%)
-              </span>
-            </div>
+            </strong>
           </div>
         ))}
       </div>
@@ -1139,64 +1143,119 @@ function StatusDonutChart({ statuses = [], total = 0, loading = false }) {
   );
 }
 
-// ========================================
-// SVG WEEKLY BAR CHART
-// ========================================
-function WeeklyBarChart({ data = [], loading = false }) {
-  if (loading) {
-    return (
-      <div className="h-56 flex items-center justify-center">
-        <RefreshCw size={24} className="animate-spin text-blue-600" />
-      </div>
-    );
+// WEEKLY BAR CHART
+function WeeklyBarChart({ data = [], loading }) {
+  if (loading) return <LoadingText />;
+
+  if (!data.length) {
+    return <EmptyText text="No weekly parcel data available." />;
   }
 
-  if (!data || data.length === 0) {
-    return (
-      <div className="h-56 flex flex-col items-center justify-center text-center p-6 border border-dashed border-slate-200 rounded-xl">
-        <BarChart3 size={32} className="text-slate-300 mb-2" />
-        <p className="text-xs font-semibold text-slate-600">No performance data available</p>
-        <p className="text-[11px] text-slate-400 mt-0.5">
-          Weekly volume will calculate automatically based on recorded dispatches.
-        </p>
-      </div>
-    );
-  }
-
-  const counts = data.map((d) => Number(d.totalDeliveries ?? d.count ?? d.total ?? 0));
-  const maxVal = Math.max(5, ...counts);
+  const max = Math.max(5, ...data.map(getDailyCount));
 
   return (
-    <div className="h-56 flex items-end justify-between gap-3 pt-6 px-2">
-      {data.map((item, idx) => {
-        const count = Number(item.totalDeliveries ?? item.count ?? item.total ?? 0);
-        const heightPct = Math.max(6, (count / maxVal) * 100);
-        const dayLabel = item.date
-          ? new Date(`${item.date}T00:00:00`).toLocaleDateString(undefined, {
-              weekday: 'short',
-            })
-          : `Day ${idx + 1}`;
+    <div className="flex h-56 items-end justify-between gap-3 px-2 pt-5">
+      {data.map((item, index) => {
+        const count = getDailyCount(item);
+        const height = Math.max(5, (count / max) * 100);
+
+        const label = item.date
+          ? new Date(`${item.date}T00:00:00`).toLocaleDateString(
+              undefined,
+              { weekday: 'short' }
+            )
+          : `Day ${index + 1}`;
 
         return (
-          <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
-            {/* Value tooltip */}
-            <span className="text-[10px] font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity mb-1">
+          <div
+            key={index}
+            className="group flex h-full flex-1 flex-col items-center justify-end"
+          >
+            <span className="mb-1 text-[10px] font-bold text-blue-600">
               {count}
             </span>
-            {/* Bar track */}
-            <div className="w-full max-w-[48px] bg-slate-100 rounded-xl overflow-hidden flex items-end h-40">
+
+            <div className="flex h-40 w-full max-w-[48px] items-end overflow-hidden rounded-xl bg-slate-100">
               <div
-                className="w-full bg-blue-600 rounded-xl group-hover:bg-blue-700 transition-all duration-500 shadow-sm"
-                style={{ height: `${heightPct}%` }}
+                className="w-full rounded-xl bg-blue-600 transition-all"
+                style={{ height: `${height}%` }}
               />
             </div>
-            {/* Label */}
-            <span className="text-[11px] font-semibold text-slate-500 mt-2">
-              {dayLabel}
+
+            <span className="mt-2 text-[11px] font-semibold text-slate-500">
+              {label}
             </span>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// LOCATION LIST
+function LocationList({ title, locations = [], loading }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-4 flex items-center gap-2">
+        <MapPin size={18} className="text-blue-600" />
+        <h3 className="font-bold text-slate-900">{title}</h3>
+      </div>
+
+      {loading ? (
+        <LoadingText />
+      ) : locations.length === 0 ? (
+        <EmptyText text="No location information available." />
+      ) : (
+        <div className="space-y-3">
+          {locations.slice(0, 5).map((item, index) => (
+            <div
+              key={index}
+              className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0"
+            >
+              <span className="text-xs text-slate-700">
+                {item.location ||
+                  item.address ||
+                  item.city ||
+                  item.name ||
+                  'Unknown location'}
+              </span>
+
+              <strong className="text-xs text-slate-900">
+                {item.count ?? item.total ?? 0}
+              </strong>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// SMALL METRIC
+function Metric({ label, value, prefix = '' }) {
+  return (
+    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      <span className="text-xs text-slate-500">{label}</span>
+      <strong className="text-sm text-slate-900">
+        {value != null ? `${prefix}${Number(value).toLocaleString()}` : '—'}
+      </strong>
+    </div>
+  );
+}
+
+function LoadingText() {
+  return (
+    <div className="flex min-h-32 items-center justify-center gap-2 text-xs text-slate-400">
+      <RefreshCw size={16} className="animate-spin" />
+      Loading data...
+    </div>
+  );
+}
+
+function EmptyText({ text }) {
+  return (
+    <div className="flex min-h-32 items-center justify-center text-center text-xs text-slate-400">
+      {text}
     </div>
   );
 }
