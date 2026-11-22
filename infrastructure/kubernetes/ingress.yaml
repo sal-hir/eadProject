@@ -1,0 +1,145 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# SwiftDrop – Kubernetes Ingress
+# Requires: nginx ingress controller (kubernetes/ingress-nginx)
+#
+# Routing strategy
+#   /api/auth/**          → auth-service:4000
+#   /api/merchant/**      → merchant-service:4001
+#   /api/parcel/**        → parcel-service:4002
+#   /api/courier/**       → courier-service:4003
+#   /api/tracking/**      → tracking-service:4004
+#   /api/dispatch/**      → dispatch-service:8080
+#   /api/admin/**         → admin-service:4009
+#   /notifications-api/** → notification-service:4005  (see SSE ingress below)
+#   /**                   → frontend:80 (React SPA / catch-all)
+#
+# Path rewrite: the (/|$)(.*) capture strips the route prefix so each service
+# receives requests at its own root (e.g. /api/auth/login → /login).
+# ──────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: swiftdrop-ingress
+  labels:
+    app.kubernetes.io/name: swiftdrop
+    app.kubernetes.io/component: ingress
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # ── Backend API routes ──────────────────────────────────────────────
+          - path: /api/auth(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 4000
+
+          - path: /api/merchant(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: merchant-service
+                port:
+                  number: 4001
+
+          - path: /api/parcel(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: parcel-service
+                port:
+                  number: 4002
+
+          - path: /api/courier(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: courier-service
+                port:
+                  number: 4003
+
+          - path: /api/tracking(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: tracking-service
+                port:
+                  number: 4004
+
+          - path: /api/dispatch(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: dispatch-service
+                port:
+                  number: 8080
+
+          - path: /api/admin(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: admin-service
+                port:
+                  number: 4009
+
+          # ── Frontend catch-all ──────────────────────────────────────────────
+          # Must be last — nginx evaluates paths in order and this matches everything.
+          - path: /(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+
+---
+# ──────────────────────────────────────────────────────────────────────────────
+# SSE Ingress – notification-service
+#
+# Server-Sent Events require:
+#   - proxy-buffering off  (chunks must reach the client immediately)
+#   - very long read/send timeouts  (connections stay open for the event stream)
+#   - HTTP/1.1 with an empty Connection header (keeps the stream alive)
+#
+# A separate Ingress object is used so these annotations don't affect the
+# timeout/buffering behaviour of the other services.
+# ──────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: swiftdrop-ingress-sse
+  labels:
+    app.kubernetes.io/name: swiftdrop
+    app.kubernetes.io/component: ingress-sse
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "86400"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Connection '';
+      chunked_transfer_encoding off;
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /notifications-api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 4005

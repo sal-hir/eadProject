@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ============================================================================
+  # 1. FRONTEND: Test & Build React/Vite Application
+  # ============================================================================
+  frontend:
+    name: Frontend (Test & Build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Build frontend production bundle
+        run: npm run build
+
+  # ============================================================================
+  # 2. BACKEND JAVA MICROSERVICES: Build & Test with Maven
+  # ============================================================================
+  backend-java:
+    name: Backend Java (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: admin-service
+            cmd: mvn -B clean test package
+          - service: auth-service
+            cmd: mvn -B clean test package
+          - service: courier-service
+            cmd: mvn -B clean test package
+          - service: dispatch-service
+            cmd: mvn -B clean package -DskipTests
+          - service: merchant-service
+            cmd: mvn -B clean test package
+          - service: parcel-service
+            cmd: mvn -B clean test package
+          - service: tracking-service
+            cmd: mvn -B clean test package
+
+    defaults:
+      run:
+        working-directory: backend/${{ matrix.service }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build and test ${{ matrix.service }}
+        run: ${{ matrix.cmd }}
+
+  # ============================================================================
+  # 3. BACKEND NODE MICROSERVICES: notification-service
+  # ============================================================================
+  backend-node:
+    name: Backend Node (notification-service)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/notification-service
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+  # ============================================================================
+  # 4. DOCKER COMPOSE CONFIG VALIDATION
+  # ============================================================================
+  docker-validation:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify Docker Compose configuration
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+  # ============================================================================
+  # 5. ALL CHECKS PASSED: Unified status check for branch protection rules
+  # ============================================================================
+  ci-status:
+    name: All CI Checks Passed
+    runs-on: ubuntu-latest
+    needs:
+      - frontend
+      - backend-java
+      - backend-node
+      - docker-validation
+    if: always()
+    steps:
+      - name: Check overall build results
+        run: |
+          if [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.backend-java.result }}" != "success" ] || \
+             [ "${{ needs.backend-node.result }}" != "success" ] || \
+             [ "${{ needs.docker-validation.result }}" != "success" ]; then
+            echo "One or more CI jobs failed."
+            exit 1
+          fi
+          echo "All CI workflow checks passed successfully!"
