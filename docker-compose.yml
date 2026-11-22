@@ -16,6 +16,8 @@ services:
       COURIER_SERVICE_URL: ${COURIER_SERVICE_URL:-http://courier-service:4003}
       TRACKING_SERVICE_URL: ${TRACKING_SERVICE_URL:-http://tracking-service:4004}
       NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:4005}
+      PARCEL_SERVICE_URL: ${PARCEL_SERVICE_URL:-http://parcel-service:4002}
+      DISPATCH_SERVICE_URL: ${DISPATCH_SERVICE_URL:-http://dispatch-service:8080}
       MERCHANT_SERVICE_TOKEN: ${MERCHANT_SERVICE_TOKEN:?Set a random MERCHANT_SERVICE_TOKEN of at least 32 characters}
     ports:
       - "4000:4000"

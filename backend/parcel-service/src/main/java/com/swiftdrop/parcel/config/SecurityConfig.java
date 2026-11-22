@@ -2,7 +2,7 @@ package com.swiftdrop.parcel.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.parcel.client.IdentityGateway;
-import com.swiftdrop.parcel.security.IdentityFilter;
+import com.swiftdrop.parcel.Security.IdentityFilter;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -53,6 +53,12 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/parcels/tracking/**",
                                 "/api/v1/parcels/all"
+                        ).permitAll()
+                        .requestMatchers(
+                                "/v3/api-docs",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

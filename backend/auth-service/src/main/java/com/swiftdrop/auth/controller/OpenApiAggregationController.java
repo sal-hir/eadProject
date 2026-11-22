@@ -31,17 +31,23 @@ public class OpenApiAggregationController {
     private final String courierUrl;
     private final String trackingUrl;
     private final String notificationUrl;
+    private final String parcelUrl;
+    private final String dispatchUrl;
     private final HttpClient httpClient;
 
     public OpenApiAggregationController(
             @Value("${services.merchant.url:${MERCHANT_SERVICE_URL:http://localhost:4001}}") String merchantUrl,
             @Value("${services.courier.url:${COURIER_SERVICE_URL:http://localhost:4003}}") String courierUrl,
             @Value("${services.tracking.url:${TRACKING_SERVICE_URL:http://localhost:4004}}") String trackingUrl,
-            @Value("${services.notification.url:${NOTIFICATION_SERVICE_URL:http://localhost:4005}}") String notificationUrl) {
+            @Value("${services.notification.url:${NOTIFICATION_SERVICE_URL:http://localhost:4005}}") String notificationUrl,
+            @Value("${services.parcel.url:${PARCEL_SERVICE_URL:http://localhost:4002}}") String parcelUrl,
+            @Value("${services.dispatch.url:${DISPATCH_SERVICE_URL:http://localhost:8080}}") String dispatchUrl) {
         this.merchantUrl = merchantUrl.replaceAll("/+$", "");
         this.courierUrl = courierUrl.replaceAll("/+$", "");
         this.trackingUrl = trackingUrl.replaceAll("/+$", "");
         this.notificationUrl = notificationUrl.replaceAll("/+$", "");
+        this.parcelUrl = parcelUrl.replaceAll("/+$", "");
+        this.dispatchUrl = dispatchUrl.replaceAll("/+$", "");
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(2500))
                 .build();
@@ -60,6 +66,16 @@ public class OpenApiAggregationController {
     @GetMapping(value = "/tracking", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getTrackingOpenApi() {
         return fetchSpec(trackingUrl + "/v3/api-docs", "Real-Time Tracking Service", trackingUrl);
+    }
+
+    @GetMapping(value = "/parcel", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> getParcelOpenApi() {
+        return fetchSpec(parcelUrl + "/v3/api-docs", "Parcel Booking & Pricing Service", parcelUrl);
+    }
+
+    @GetMapping(value = "/dispatch", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> getDispatchOpenApi() {
+        return fetchSpec(dispatchUrl + "/v3/api-docs", "Dispatch Service", dispatchUrl);
     }
 
     @GetMapping(value = "/notification", produces = MediaType.APPLICATION_JSON_VALUE)

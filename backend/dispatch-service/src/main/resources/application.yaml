@@ -37,3 +37,21 @@ services:
     url: ${PARCEL_SERVICE_URL:http://parcel-service:4002}
   auth:
     url: ${AUTH_SERVICE_URL:http://auth-service:4000}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    title: SwiftDrop Dispatch Service Documentation
+    display-request-duration: true
+    try-it-out-enabled: true
+    persist-authorization: true
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+app:
+  swagger:
+    server-url: ${DISPATCH_SERVICE_URL:http://localhost:8080}

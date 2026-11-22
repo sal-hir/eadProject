@@ -1,4 +1,4 @@
-package com.swiftdrop.parcel.security;
+package com.swiftdrop.parcel.Security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.swiftdrop.parcel.client.IdentityGateway;
@@ -40,7 +40,11 @@ public class IdentityFilter extends OncePerRequestFilter {
                 || (path != null && path.equals("/actuator/health"))
                 || (path != null && path.startsWith("/actuator/health/"))
                 || (path != null && path.startsWith("/api/v1/parcels/tracking/"))
-                || (path != null && path.equals("/api/v1/info"));
+                || (uri != null && (uri.equals("/v3/api-docs") || uri.startsWith("/v3/api-docs/")))
+                || (uri != null && (uri.equals("/swagger-ui.html") || uri.startsWith("/swagger-ui/")))
+                || (path != null && path.equals("/api/v1/info"))
+                || (path != null && (path.equals("/v3/api-docs") || path.startsWith("/v3/api-docs/")))
+                || (path != null && (path.equals("/swagger-ui.html") || path.startsWith("/swagger-ui/")));
     }
 
     @Override
