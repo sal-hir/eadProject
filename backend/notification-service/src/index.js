@@ -23,6 +23,7 @@ const sseClients = new Set();
 
 function broadcastSse(data) {
   const payload = `data: ${JSON.stringify(data)}\n\n`;
+  logger.info(`📢 Broadcasting SSE event to ${sseClients.size} client(s): ${data.event || 'unknown'} (parcel: ${data.trackingNumber || 'N/A'}, recipient: ${data.recipientEmail || 'all'})`);
   for (const client of sseClients) {
     try {
       client.write(payload);
@@ -32,13 +33,24 @@ function broadcastSse(data) {
   }
 }
 
+// Keep-alive heartbeat every 15 seconds to prevent browser/proxy timeouts
+setInterval(() => {
+  for (const client of sseClients) {
+    try {
+      client.write(': ping\n\n');
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+}, 15000);
+
 // HTTP Health Check, SMS History, and Real-time SSE Notification Stream
 function startHttpServer() {
   const server = http.createServer((req, res) => {
     // Enable CORS for frontend
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -46,36 +58,44 @@ function startHttpServer() {
       return;
     }
 
-    if (req.url === '/health' || req.url === '/actuator/health') {
+    // Normalize URL to handle both direct and reverse-proxied paths (/notifications-api/...)
+    const cleanUrl = (req.url || '').replace(/^\/notifications-api/, '') || '/';
+
+    if (cleanUrl === '/health' || cleanUrl === '/actuator/health') {
       res.writeHead(isConsumerHealthy ? 200 : 503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: isConsumerHealthy ? 'UP' : 'DOWN', service: 'notification-service' }));
       return;
     }
 
-    if (req.url === '/api/v1/notifications/sms-log') {
+    if (cleanUrl === '/api/v1/notifications/sms-log') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, count: getSmsHistory().length, messages: getSmsHistory() }));
       return;
     }
 
     // Server-Sent Events (SSE) stream for live in-app notifications
-    if (req.url?.startsWith('/api/v1/notifications/stream')) {
+    if (cleanUrl.startsWith('/api/v1/notifications/stream') || req.url?.startsWith('/api/v1/notifications/stream')) {
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'X-Accel-Buffering': 'no',
       });
       res.write(': connected\n\n');
       sseClients.add(res);
+      logger.info(`📡 SSE client connected (Total active clients: ${sseClients.size})`);
 
       req.on('close', () => {
         sseClients.delete(res);
+        logger.info(`🔌 SSE client disconnected (Remaining active clients: ${sseClients.size})`);
       });
       return;
     }
 
     // GET /api/v1/info - Public system info endpoint (no auth required)
-    if (req.method === 'GET' && req.url === '/api/v1/info') {
+    if (req.method === 'GET' && (cleanUrl === '/api/v1/info' || cleanUrl === '/info')) {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify({
         applicationName: 'notification-service',
@@ -88,7 +108,7 @@ function startHttpServer() {
       return;
     }
     res.writeHead(404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
+    res.end(JSON.stringify({ error: 'Not found', requestedUrl: req.url, cleanedUrl: cleanUrl }));
   });
 
   server.listen(PORT, '0.0.0.0', () => {

@@ -81,78 +81,112 @@ export const NotificationCenterProvider = ({ children }) => {
 
   // Connect to Notification Service SSE Stream for real-time live events from RabbitMQ
   useEffect(() => {
-    if (!user) return;
+    // Determine the SSE URL
+    const isLocalhost = typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-    // Prefer same-origin proxied path in production/browser, fallback to direct port 4005 in dev
-    const sseUrl = import.meta.env.VITE_NOTIFICATION_URL ||
-      (typeof window !== 'undefined' && window.location.port === '3000'
-        ? '/notifications-api/api/v1/notifications/stream'
-        : 'http://localhost:4005/api/v1/notifications/stream');
+    const urls = [
+      import.meta.env.VITE_NOTIFICATION_URL,
+      isLocalhost ? 'http://localhost:4005/api/v1/notifications/stream' : null,
+      '/notifications-api/api/v1/notifications/stream',
+    ].filter(Boolean);
 
+    let urlIndex = 0;
     let eventSource = null;
+    let isClosed = false;
 
-    try {
-      eventSource = new EventSource(sseUrl);
+    const connect = () => {
+      if (isClosed || urlIndex >= urls.length) return;
+      const sseUrl = urls[urlIndex];
 
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'PARCEL_NOTIFICATION' || data.type === 'PARCEL_STATUS_UPDATE') {
-            const isTargetUser = !data.recipientEmail ||
-              data.recipientEmail.toLowerCase() === user.email?.toLowerCase() ||
-              user.role === 'ADMIN' || user.role === 'CUSTOMER';
+      try {
+        console.log(`🔔 [NotificationCenter] Connecting to SSE at ${sseUrl}...`);
+        eventSource = new EventSource(sseUrl);
 
-            if (isTargetUser) {
-              const statusToneMap = {
-                CREATED: 'success',
-                DELIVERED: 'success',
-                OUT_FOR_DELIVERY: 'warning',
-                FAILED: 'error',
-                CANCELLED: 'error',
-                PICKED_UP: 'info',
-                IN_TRANSIT: 'info',
-                PENDING_PICKUP: 'info',
-              };
+        eventSource.onopen = () => {
+          console.log(`✅ [NotificationCenter] SSE connected successfully to ${sseUrl}`);
+        };
 
-              let title = `Parcel ${data.trackingNumber || 'Update'}: ${data.newStatus || 'UPDATED'}`;
-              let message = data.note || `Status transitioned to ${data.newStatus || 'UPDATED'}`;
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('📨 [NotificationCenter] SSE message received:', data);
 
-              if (data.event === 'parcel.created') {
-                title = `Parcel Booked: ${data.trackingNumber}`;
-                message = 'Your delivery request was created and confirmed.';
-              } else if (data.event === 'parcel.assigned') {
-                title = `Courier Assigned: ${data.trackingNumber}`;
-                message = data.courierName
-                  ? `Courier ${data.courierName} is assigned to collect your parcel.`
-                  : 'A courier has been assigned to collect your package.';
-              } else if (data.newStatus === 'FAILED') {
-                message = data.failureReason
-                  ? `Delivery attempt failed: ${data.failureReason}`
-                  : (data.note || 'Delivery attempt unsuccessful.');
+            if (data.type === 'PARCEL_NOTIFICATION' || data.type === 'PARCEL_STATUS_UPDATE') {
+              const currentEmail = user?.email?.toLowerCase().trim();
+              const targetEmail = data.recipientEmail?.toLowerCase().trim();
+
+              const isTargetUser = !targetEmail ||
+                !currentEmail ||
+                targetEmail === currentEmail ||
+                user?.role === 'ADMIN' ||
+                user?.role === 'CUSTOMER';
+
+              if (isTargetUser) {
+                const statusToneMap = {
+                  CREATED: 'success',
+                  DELIVERED: 'success',
+                  OUT_FOR_DELIVERY: 'warning',
+                  FAILED: 'error',
+                  CANCELLED: 'error',
+                  PICKED_UP: 'info',
+                  IN_TRANSIT: 'info',
+                  PENDING_PICKUP: 'info',
+                };
+
+                let title = `Parcel ${data.trackingNumber || 'Update'}: ${data.newStatus || 'UPDATED'}`;
+                let message = data.note || `Status transitioned to ${data.newStatus || 'UPDATED'}`;
+
+                if (data.event === 'parcel.created') {
+                  title = `Parcel Booked: ${data.trackingNumber}`;
+                  message = 'Your delivery request was created and confirmed.';
+                } else if (data.event === 'parcel.assigned') {
+                  title = `Courier Assigned: ${data.trackingNumber}`;
+                  message = data.courierName
+                    ? `Courier ${data.courierName} is assigned to collect your parcel.`
+                    : 'A courier has been assigned to collect your package.';
+                } else if (data.newStatus === 'FAILED') {
+                  message = data.failureReason
+                    ? `Delivery attempt failed: ${data.failureReason}`
+                    : (data.note || 'Delivery attempt unsuccessful.');
+                }
+
+                notify({
+                  title,
+                  message,
+                  tone: statusToneMap[data.newStatus] || 'info',
+                  trackingNumber: data.trackingNumber,
+                  showToast: true,
+                });
               }
-
-              notify({
-                title,
-                message,
-                tone: statusToneMap[data.newStatus] || 'info',
-                trackingNumber: data.trackingNumber,
-                showToast: true,
-              });
             }
+          } catch (e) {
+            console.error('Error parsing SSE event', e);
           }
-        } catch (e) {
-          console.error('Error parsing SSE event', e);
-        }
-      };
+        };
 
-      eventSource.onerror = () => {
-        // SSE handles reconnection automatically
-      };
-    } catch (e) {
-      console.warn('Could not establish Notification SSE connection', e);
-    }
+        eventSource.onerror = (err) => {
+          console.warn(`⚠️ [NotificationCenter] SSE connection error on ${sseUrl}:`, err);
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          // Try next fallback endpoint if available
+          if (!isClosed && urlIndex + 1 < urls.length) {
+            urlIndex++;
+            console.log(`🔄 [NotificationCenter] Retrying with fallback SSE URL: ${urls[urlIndex]}`);
+            setTimeout(connect, 1000);
+          }
+        };
+      } catch (e) {
+        console.warn('Could not establish Notification SSE connection', e);
+      }
+    };
+
+    connect();
 
     return () => {
+      isClosed = true;
       if (eventSource) {
         eventSource.close();
       }
