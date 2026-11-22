@@ -160,14 +160,22 @@ async function startRabbitMqConsumer() {
 
           // Push live event to frontend browsers over SSE!
           broadcastSse({
+            ...payload,
             type: 'PARCEL_NOTIFICATION',
             event: payload.event || (payload.newStatus ? 'parcel.status_changed' : 'parcel.created'),
             trackingNumber: payload.trackingNumber,
             recipientEmail: payload.recipientEmail,
-            newStatus: payload.newStatus || 'CREATED',
+            recipientName: payload.recipientName,
+            senderEmail: payload.senderEmail || payload.merchantEmail,
+            merchantId: payload.merchantId,
+            courierId: payload.courierId,
+            courierName: payload.courierName,
+            newStatus: payload.newStatus || payload.status || 'CREATED',
+            previousStatus: payload.previousStatus,
             note: payload.note,
             failureReason: payload.failureReason,
-            courierName: payload.courierName,
+            pickupCity: payload.pickupCity,
+            dropoffCity: payload.dropoffCity,
             timestamp: payload.timestamp || new Date().toISOString()
           });
 

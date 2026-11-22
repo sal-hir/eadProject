@@ -32,7 +32,15 @@ export const NotificationCenterProvider = ({ children }) => {
             tone: 'info',
             timestamp: new Date().toISOString(),
             read: false,
-            link: user.role === 'COURIER' ? '/courier' : '/customer',
+            link: user.role === 'COURIER'
+              ? '/courier'
+              : (user.role === 'MERCHANT'
+                ? '/merchant'
+                : (user.role === 'ADMIN'
+                  ? '/admin'
+                  : (user.role === 'DISPATCHER'
+                    ? '/dispatcher/dashboard'
+                    : '/customer'))),
           },
         ];
         setNotifications(initial);
@@ -114,13 +122,107 @@ export const NotificationCenterProvider = ({ children }) => {
 
             if (data.type === 'PARCEL_NOTIFICATION' || data.type === 'PARCEL_STATUS_UPDATE') {
               const currentEmail = user?.email?.toLowerCase().trim();
-              const targetEmail = data.recipientEmail?.toLowerCase().trim();
+              const currentId = user?.id;
+              const currentRole = user?.role;
+              const targetRecipientEmail = data.recipientEmail?.toLowerCase().trim();
+              const targetSenderEmail = (data.senderEmail || data.merchantEmail)?.toLowerCase().trim();
+              const targetCourierId = data.courierId;
+              const targetCourierEmail = data.courierEmail?.toLowerCase().trim();
+              const targetCourierName = data.courierName?.toLowerCase().trim();
 
-              const isTargetUser = !targetEmail ||
-                !currentEmail ||
-                targetEmail === currentEmail ||
-                user?.role === 'ADMIN' ||
-                user?.role === 'CUSTOMER';
+              let isTargetUser = false;
+              let roleLink = data.trackingNumber ? `/track/${data.trackingNumber}` : null;
+              let title = `Parcel ${data.trackingNumber || 'Update'}: ${data.newStatus || 'UPDATED'}`;
+              let message = data.note || `Status transitioned to ${data.newStatus || 'UPDATED'}`;
+
+              // 1. ADMIN & DISPATCHER: Platform operations see all events across the fleet
+              if (currentRole === 'ADMIN' || currentRole === 'DISPATCHER') {
+                isTargetUser = true;
+                roleLink = currentRole === 'ADMIN' ? '/admin' : '/dispatcher/dashboard';
+                if (data.event === 'parcel.created') {
+                  title = `New Parcel Created: ${data.trackingNumber || 'Booking'}`;
+                  message = `Shipment registered for ${data.recipientName || 'customer'} (${data.dropoffCity || ''})`;
+                } else if (data.event === 'parcel.assigned') {
+                  title = `Courier Assigned: ${data.trackingNumber || 'Parcel'}`;
+                  message = `Courier ${data.courierName || 'assigned'} assigned for pickup`;
+                } else if (data.newStatus === 'FAILED') {
+                  title = `⚠️ Delivery Exception: ${data.trackingNumber || 'Parcel'}`;
+                  message = data.failureReason || data.note || 'Delivery attempt failed.';
+                } else if (data.newStatus === 'DELIVERED') {
+                  title = `Parcel Delivered: ${data.trackingNumber || 'Parcel'}`;
+                  message = `Successfully delivered to ${data.recipientName || 'customer'}.`;
+                }
+              }
+              // 2. COURIER: Sees tasks assigned to them or available for collection
+              else if (currentRole === 'COURIER') {
+                const isAssignedToMe = (targetCourierId && targetCourierId === currentId) ||
+                  (targetCourierEmail && currentEmail && targetCourierEmail === currentEmail) ||
+                  (targetCourierName && user?.name && targetCourierName === user.name.toLowerCase().trim());
+
+                if (isAssignedToMe || data.event === 'parcel.assigned' || data.newStatus === 'PENDING_PICKUP') {
+                  isTargetUser = true;
+                  roleLink = '/courier';
+                  if (data.event === 'parcel.assigned') {
+                    title = `New Delivery Assignment: ${data.trackingNumber || ''}`;
+                    message = `You have been assigned parcel ${data.trackingNumber || ''}. Check pickup details.`;
+                  } else if (data.newStatus === 'PENDING_PICKUP') {
+                    title = `Pickup Ready: ${data.trackingNumber || ''}`;
+                    message = `Parcel is prepared for collection at pickup address.`;
+                  } else if (data.newStatus === 'CANCELLED') {
+                    title = `Task Cancelled: ${data.trackingNumber || ''}`;
+                    message = `Delivery for parcel ${data.trackingNumber || ''} has been cancelled.`;
+                  }
+                }
+              }
+              // 3. MERCHANT: Sees parcels dispatched from their merchant store
+              else if (currentRole === 'MERCHANT') {
+                const isMyStore = (targetSenderEmail && currentEmail && targetSenderEmail === currentEmail) ||
+                  (data.merchantId && data.merchantId === currentId) ||
+                  (!targetSenderEmail && !data.merchantId);
+
+                if (isMyStore) {
+                  isTargetUser = true;
+                  roleLink = '/merchant';
+                  if (data.event === 'parcel.created') {
+                    title = `Order Confirmed: ${data.trackingNumber || ''}`;
+                    message = `Shipment booked for ${data.recipientName || 'customer'}. Awaiting courier pickup.`;
+                  } else if (data.newStatus === 'PICKED_UP') {
+                    title = `Courier Collected: ${data.trackingNumber || ''}`;
+                    message = `Courier ${data.courierName || ''} picked up order for ${data.recipientName || 'customer'}.`;
+                  } else if (data.newStatus === 'OUT_FOR_DELIVERY') {
+                    title = `Out for Delivery: ${data.trackingNumber || ''}`;
+                    message = `Order is on its final delivery route to ${data.recipientName || 'customer'}.`;
+                  } else if (data.newStatus === 'DELIVERED') {
+                    title = `Delivered: ${data.trackingNumber || ''}`;
+                    message = `Order successfully delivered to ${data.recipientName || 'customer'}.`;
+                  } else if (data.newStatus === 'FAILED') {
+                    title = `Delivery Issue: ${data.trackingNumber || ''}`;
+                    message = `Delivery to ${data.recipientName || 'customer'} failed: ${data.failureReason || 'Action required'}.`;
+                  }
+                }
+              }
+              // 4. CUSTOMER / DEFAULT: Sees parcels addressed to them
+              else {
+                const isRecipient = !targetRecipientEmail || (currentEmail && targetRecipientEmail === currentEmail) || !user;
+
+                if (isRecipient) {
+                  isTargetUser = true;
+                  roleLink = data.trackingNumber ? `/track/${data.trackingNumber}` : '/customer';
+                  if (data.event === 'parcel.created') {
+                    title = `Parcel Booked: ${data.trackingNumber || ''}`;
+                    message = 'Your delivery request was created and confirmed.';
+                  } else if (data.event === 'parcel.assigned') {
+                    title = `Courier Assigned: ${data.trackingNumber || ''}`;
+                    message = data.courierName
+                      ? `Courier ${data.courierName} is assigned to collect your parcel.`
+                      : 'A courier has been assigned to collect your package.';
+                  } else if (data.newStatus === 'FAILED') {
+                    message = data.failureReason
+                      ? `Delivery attempt failed: ${data.failureReason}`
+                      : (data.note || 'Delivery attempt unsuccessful.');
+                  }
+                }
+              }
 
               if (isTargetUser) {
                 const statusToneMap = {
@@ -134,28 +236,12 @@ export const NotificationCenterProvider = ({ children }) => {
                   PENDING_PICKUP: 'info',
                 };
 
-                let title = `Parcel ${data.trackingNumber || 'Update'}: ${data.newStatus || 'UPDATED'}`;
-                let message = data.note || `Status transitioned to ${data.newStatus || 'UPDATED'}`;
-
-                if (data.event === 'parcel.created') {
-                  title = `Parcel Booked: ${data.trackingNumber}`;
-                  message = 'Your delivery request was created and confirmed.';
-                } else if (data.event === 'parcel.assigned') {
-                  title = `Courier Assigned: ${data.trackingNumber}`;
-                  message = data.courierName
-                    ? `Courier ${data.courierName} is assigned to collect your parcel.`
-                    : 'A courier has been assigned to collect your package.';
-                } else if (data.newStatus === 'FAILED') {
-                  message = data.failureReason
-                    ? `Delivery attempt failed: ${data.failureReason}`
-                    : (data.note || 'Delivery attempt unsuccessful.');
-                }
-
                 notify({
                   title,
                   message,
                   tone: statusToneMap[data.newStatus] || 'info',
                   trackingNumber: data.trackingNumber,
+                  link: roleLink,
                   showToast: true,
                 });
               }
