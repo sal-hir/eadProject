@@ -213,7 +213,7 @@ export function ApplicationLayout({ children }) {
     else { document.documentElement.scrollTop = 0; document.body.scrollTop = 0; }
   }, [pathname, hash]);
   if (['/login', '/register', '/forgot-password', '/reset-password', '/activate', '/auth/callback'].includes(pathname)) return <AuthLayout>{children}</AuthLayout>;
-  if (isAuthenticated && /^\/(customer|merchant|courier|admin|account|parcels)(\/|$)/.test(pathname)) {
+  if (isAuthenticated && /^\/(customer|merchant|courier|dispatcher|admin|account|parcels)(\/|$)/.test(pathname)) {
     const Layout = { CUSTOMER: CustomerLayout, MERCHANT: MerchantLayout, COURIER: CourierLayout, DISPATCHER: DispatcherLayout, ADMIN: AdminLayout }[user?.role] || PortalLayout;
     return <Layout>{children}</Layout>;
   }
