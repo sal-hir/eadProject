@@ -85,11 +85,7 @@ export function navigationFor(role) {
             label: 'Pricing Management',
             icon: DollarSign,
           },
-          {
-            to: '/admin/analytics',
-            label: ' Analytics',
-            icon: ChartNoAxesCombined,
-          },
+      
           {
             to: '/dispatcher/dashboard',
             label: 'Dispatch',
