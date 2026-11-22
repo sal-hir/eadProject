@@ -651,69 +651,6 @@ export const AdminDashboard = () => {
         </div>
       </div>
 
-      {/* COURIER SUMMARY */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Truck size={19} className="text-blue-600" />
-              <h3 className="font-bold text-slate-900">
-                Courier Overview
-              </h3>
-            </div>
-
-            <p className="mt-1 text-xs text-slate-500">
-              Courier information from your existing courier API
-            </p>
-          </div>
-
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-            {couriers.length} Couriers
-          </span>
-        </div>
-
-        {loading ? (
-          <LoadingText />
-        ) : couriers.length === 0 ? (
-          <EmptyText text="No courier information available." />
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {couriers.slice(0, 6).map((courier) => (
-              <div
-                key={courier.id}
-                className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                    <Truck size={20} />
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-slate-900">
-                      {courier.user?.name || courier.name || 'Courier'}
-                    </p>
-
-                    <p className="text-xs text-slate-500">
-                      {courier.vehicleType || 'Vehicle not specified'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex justify-between border-t border-slate-200 pt-3 text-xs">
-                  <span className="text-slate-500">
-                    Active deliveries
-                  </span>
-
-                  <strong className="text-slate-900">
-                    {courier.activeDeliveries ?? 0}
-                  </strong>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* RECENT PARCEL TABLE */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-4 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -776,8 +713,6 @@ export const AdminDashboard = () => {
                   <th className="px-5 py-4">Recipient</th>
                   <th className="px-5 py-4">Weight</th>
                   <th className="px-5 py-4">Status</th>
-                  <th className="px-5 py-4">Courier</th>
-                  <th className="px-5 py-4 text-right">Action</th>
                 </tr>
               </thead>
 
@@ -835,34 +770,6 @@ export const AdminDashboard = () => {
 
                     <td className="px-5 py-4">
                       <StatusBadge status={parcel.status || 'PENDING'} />
-                    </td>
-
-                    <td className="px-5 py-4 text-slate-600">
-                      {parcel.courierId
-                        ? getCourierName(parcel)
-                        : 'Unassigned'}
-                    </td>
-
-                    <td className="px-5 py-4 text-right">
-                      {!parcel.courierId &&
-                      parcel.status !== 'DELIVERED' ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAssigningParcel(parcel);
-                            setAssignError('');
-                            setSelectedCourierId('');
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700"
-                        >
-                          <Send size={12} />
-                          Assign
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">
-                          Assigned
-                        </span>
-                      )}
                     </td>
                   </tr>
                 ))}
