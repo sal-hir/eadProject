@@ -1,12 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, CheckCheck, Trash2, Package, ExternalLink, CheckCircle2, AlertTriangle, Info, AlertCircle } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, Package, ExternalLink, CheckCircle2, AlertTriangle, Info, AlertCircle, Volume2, VolumeX, BellRing } from 'lucide-react';
 import { useNotificationCenter } from '../context/NotificationCenterContext';
 
 export function NotificationBellDropdown() {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
-  const { notifications, unreadCount, markAsRead, markAllAsRead, clearAll } = useNotificationCenter();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    clearAll,
+    soundEnabled,
+    toggleSound,
+    desktopPushEnabled,
+    requestDesktopPush,
+    playChime,
+  } = useNotificationCenter();
 
   // Close when clicking outside
   useEffect(() => {
@@ -102,6 +113,40 @@ export function NotificationBellDropdown() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* User Preferences Bar (Sound Chime & Desktop Push Toggles) */}
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 bg-slate-50/80 dark:bg-white/[0.02] px-3.5 py-1.5 text-xs text-slate-500">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleSound}
+                title={soundEnabled ? 'Sound alerts enabled (Click to mute)' : 'Sound alerts muted (Click to enable)'}
+                className={`flex items-center gap-1 font-medium transition ${soundEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+                <span>{soundEnabled ? 'Chime ON' : 'Muted'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={requestDesktopPush}
+                title={desktopPushEnabled ? 'Desktop alerts enabled' : 'Click to enable native desktop notifications'}
+                className={`flex items-center gap-1 font-medium transition ${desktopPushEnabled ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 hover:text-slate-700'}`}
+              >
+                <BellRing size={13} />
+                <span>{desktopPushEnabled ? 'Desktop ON' : 'Enable Desktop'}</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={playChime}
+              title="Test chime sound"
+              className="text-[11px] text-slate-400 hover:text-[#F95716] dark:hover:text-[#F95716] transition underline cursor-pointer"
+            >
+              Test Sound
+            </button>
           </div>
 
           {/* List of Notifications */}

@@ -50,6 +50,15 @@
       "arguments": {}
     },
     {
+      "name": "swiftdrop.parcel.exchange",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
       "name": "swiftdrop.events.dlx",
       "vhost": "/",
       "type": "direct",
@@ -100,11 +109,19 @@
   ],
   "bindings": [
     {
+      "source": "swiftdrop.parcel.exchange",
+      "vhost": "/",
+      "destination": "swiftdrop.events",
+      "destination_type": "exchange",
+      "routing_key": "#",
+      "arguments": {}
+    },
+    {
       "source": "swiftdrop.events",
       "vhost": "/",
       "destination": "swiftdrop.notifications.email",
       "destination_type": "queue",
-      "routing_key": "parcel.*",
+      "routing_key": "parcel.#",
       "arguments": {}
     },
     {
@@ -112,7 +129,7 @@
       "vhost": "/",
       "destination": "swiftdrop.notifications.sms",
       "destination_type": "queue",
-      "routing_key": "parcel.*",
+      "routing_key": "parcel.#",
       "arguments": {}
     },
     {
@@ -120,7 +137,31 @@
       "vhost": "/",
       "destination": "swiftdrop.notifications.webhook",
       "destination_type": "queue",
-      "routing_key": "parcel.*",
+      "routing_key": "parcel.#",
+      "arguments": {}
+    },
+    {
+      "source": "swiftdrop.parcel.exchange",
+      "vhost": "/",
+      "destination": "swiftdrop.notifications.email",
+      "destination_type": "queue",
+      "routing_key": "parcel.#",
+      "arguments": {}
+    },
+    {
+      "source": "swiftdrop.parcel.exchange",
+      "vhost": "/",
+      "destination": "swiftdrop.notifications.sms",
+      "destination_type": "queue",
+      "routing_key": "parcel.#",
+      "arguments": {}
+    },
+    {
+      "source": "swiftdrop.parcel.exchange",
+      "vhost": "/",
+      "destination": "swiftdrop.notifications.webhook",
+      "destination_type": "queue",
+      "routing_key": "parcel.#",
       "arguments": {}
     },
     {

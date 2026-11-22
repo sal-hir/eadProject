@@ -1,6 +1,8 @@
 const amqp = require('amqplib');
 const winston = require('winston');
 const http = require('http');
+const https = require('https');
+const { URL } = require('url');
 const { initTransport, sendEmailNotification } = require('./emailService');
 const { sendSmsNotification, getSmsHistory } = require('./smsService');
 
@@ -12,11 +14,125 @@ const logger = winston.createLogger({
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://swiftdrop:swiftdrop_pass@rabbitmq:5672';
 const EXCHANGE_NAME = 'swiftdrop.events';
+const PARCEL_EXCHANGE = 'swiftdrop.parcel.exchange';
 const EMAIL_QUEUE = 'swiftdrop.notifications.email';
 const SMS_QUEUE = 'swiftdrop.notifications.sms';
+const WEBHOOK_QUEUE = 'swiftdrop.notifications.webhook';
+const DLQ_QUEUE = 'swiftdrop.dead-letter';
 const PORT = parseInt(process.env.PORT || '4005', 10);
 
 let isConsumerHealthy = false;
+let rabbitChannel = null;
+
+// In-memory audit log of merchant webhook dispatches
+const webhookHistory = [];
+const MAX_LOG_SIZE = 100;
+
+function recordWebhookLog(entry) {
+  webhookHistory.unshift(entry);
+  if (webhookHistory.length > MAX_LOG_SIZE) webhookHistory.pop();
+}
+
+async function dispatchWebhookNotification(payload) {
+  const trackingNumber = payload.trackingNumber || 'N/A';
+  const event = payload.event || (payload.newStatus ? 'parcel.status_changed' : 'parcel.created');
+  const targetUrl = payload.webhookUrl || process.env.DEFAULT_WEBHOOK_URL || null;
+
+  const body = {
+    event,
+    eventType: payload.eventType || event,
+    trackingNumber,
+    newStatus: payload.newStatus || payload.status || 'CREATED',
+    previousStatus: payload.previousStatus || null,
+    recipientName: payload.recipientName || null,
+    recipientEmail: payload.recipientEmail || null,
+    senderEmail: payload.senderEmail || payload.merchantEmail || null,
+    merchantId: payload.merchantId || null,
+    courierName: payload.courierName || null,
+    note: payload.note || null,
+    timestamp: payload.timestamp || new Date().toISOString(),
+  };
+
+  const logEntry = {
+    id: `wh-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    event,
+    trackingNumber,
+    targetUrl: targetUrl || 'mock://merchant-b2b-endpoint/webhooks',
+    status: 'PENDING',
+    statusCode: null,
+    timestamp: new Date().toISOString(),
+    payload: body,
+  };
+
+  if (!targetUrl) {
+    logEntry.status = 'DELIVERED (SIMULATED)';
+    logEntry.statusCode = 200;
+    logEntry.response = 'Acknowledged by merchant B2B receiver';
+    recordWebhookLog(logEntry);
+    logger.info(`🔗 [WEBHOOK] Simulated webhook delivered for ${trackingNumber} -> ${logEntry.targetUrl}`);
+    return logEntry;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const parsedUrl = new URL(targetUrl);
+      const client = parsedUrl.protocol === 'https:' ? https : http;
+      const dataString = JSON.stringify(body);
+
+      const req = client.request(
+        parsedUrl,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(dataString),
+            'User-Agent': 'SwiftDrop-Webhook-Dispatcher/1.0',
+            'X-SwiftDrop-Event': event,
+            'X-SwiftDrop-Timestamp': new Date().toISOString(),
+          },
+          timeout: 5000,
+        },
+        (res) => {
+          let responseBody = '';
+          res.on('data', (c) => (responseBody += c));
+          res.on('end', () => {
+            logEntry.status = res.statusCode >= 200 && res.statusCode < 300 ? 'DELIVERED' : 'FAILED';
+            logEntry.statusCode = res.statusCode;
+            logEntry.response = responseBody.slice(0, 200);
+            recordWebhookLog(logEntry);
+            logger.info(`🔗 [WEBHOOK] HTTP ${res.statusCode} from ${targetUrl} for ${trackingNumber}`);
+            resolve(logEntry);
+          });
+        }
+      );
+
+      req.on('error', (err) => {
+        logEntry.status = 'ERROR';
+        logEntry.error = err.message;
+        recordWebhookLog(logEntry);
+        logger.warn(`⚠️ [WEBHOOK] Delivery failed to ${targetUrl}: ${err.message}`);
+        resolve(logEntry);
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        logEntry.status = 'TIMEOUT';
+        recordWebhookLog(logEntry);
+        logger.warn(`⚠️ [WEBHOOK] Timeout for ${targetUrl}`);
+        resolve(logEntry);
+      });
+
+      req.write(dataString);
+      req.end();
+    } catch (err) {
+      logEntry.status = 'INVALID_URL';
+      logEntry.error = err.message;
+      recordWebhookLog(logEntry);
+      logger.error(`❌ [WEBHOOK] Invalid webhook URL: ${targetUrl}`, err.message);
+      resolve(logEntry);
+    }
+  });
+}
 
 // In-memory list of active SSE client responses
 const sseClients = new Set();
@@ -73,6 +189,33 @@ function startHttpServer() {
       return;
     }
 
+    if (cleanUrl === '/api/v1/notifications/webhook-log') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, count: webhookHistory.length, webhooks: webhookHistory }));
+      return;
+    }
+
+    if (cleanUrl === '/api/v1/notifications/dlq') {
+      if (!rabbitChannel) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'DOWN', error: 'RabbitMQ channel not active' }));
+        return;
+      }
+      rabbitChannel.checkQueue(DLQ_QUEUE).then((queueInfo) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          queue: DLQ_QUEUE,
+          messageCount: queueInfo.messageCount,
+          consumerCount: queueInfo.consumerCount,
+          status: queueInfo.messageCount === 0 ? 'HEALTHY' : 'PENDING_EXCEPTIONS',
+        }));
+      }).catch((err) => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      });
+      return;
+    }
+
     // Server-Sent Events (SSE) stream for live in-app notifications
     if (cleanUrl.startsWith('/api/v1/notifications/stream') || req.url?.startsWith('/api/v1/notifications/stream')) {
       res.writeHead(200, {
@@ -125,29 +268,57 @@ async function startRabbitMqConsumer() {
       logger.info(`🔌 Connecting to RabbitMQ at ${RABBITMQ_URL} (Attempt ${attempt + 1}/${maxRetries})...`);
       const connection = await amqp.connect(RABBITMQ_URL);
       const channel = await connection.createChannel();
+      rabbitChannel = channel;
 
       channel.prefetch(1);
 
+      // Assert Exchanges
       await channel.assertExchange(EXCHANGE_NAME, 'topic', { durable: true });
+      await channel.assertExchange(PARCEL_EXCHANGE, 'topic', { durable: true });
+      await channel.assertExchange('swiftdrop.events.dlx', 'direct', { durable: true });
+
+      // Forward events from parcel-service / dispatch-service exchange into swiftdrop.events
+      try {
+        await channel.bindExchange(EXCHANGE_NAME, PARCEL_EXCHANGE, '#');
+        logger.info(`🔗 Exchange bridge established: ${PARCEL_EXCHANGE} -> ${EXCHANGE_NAME}`);
+      } catch (e) {
+        logger.warn('Could not bind exchange bridge:', e.message);
+      }
+
+      // Assert Queues with DLX
+      const dlqArgs = {
+        'x-dead-letter-exchange': 'swiftdrop.events.dlx',
+      };
+
       await channel.assertQueue(EMAIL_QUEUE, {
         durable: true,
-        arguments: {
-          'x-dead-letter-exchange': 'swiftdrop.events.dlx',
-          'x-dead-letter-routing-key': 'email.dlq',
-        },
+        arguments: { ...dlqArgs, 'x-dead-letter-routing-key': 'email.dlq' },
       });
       await channel.assertQueue(SMS_QUEUE, {
         durable: true,
-        arguments: {
-          'x-dead-letter-exchange': 'swiftdrop.events.dlx',
-          'x-dead-letter-routing-key': 'sms.dlq',
-        },
+        arguments: { ...dlqArgs, 'x-dead-letter-routing-key': 'sms.dlq' },
       });
+      await channel.assertQueue(WEBHOOK_QUEUE, {
+        durable: true,
+        arguments: { ...dlqArgs, 'x-dead-letter-routing-key': 'webhook.dlq' },
+      });
+      await channel.assertQueue(DLQ_QUEUE, { durable: true });
 
-      await channel.bindQueue(EMAIL_QUEUE, EXCHANGE_NAME, 'parcel.*');
-      await channel.bindQueue(SMS_QUEUE, EXCHANGE_NAME, 'parcel.*');
+      // Bind Queues to swiftdrop.events (supports single word 'parcel.*' and dotted 'parcel.#')
+      for (const rk of ['parcel.*', 'parcel.#', '#']) {
+        await channel.bindQueue(EMAIL_QUEUE, EXCHANGE_NAME, rk);
+        await channel.bindQueue(SMS_QUEUE, EXCHANGE_NAME, rk);
+        await channel.bindQueue(WEBHOOK_QUEUE, EXCHANGE_NAME, rk);
+      }
 
-      logger.info(' Connected to RabbitMQ!');
+      // Also bind directly to PARCEL_EXCHANGE for resilience
+      for (const rk of ['parcel.*', 'parcel.#', '#']) {
+        await channel.bindQueue(EMAIL_QUEUE, PARCEL_EXCHANGE, rk);
+        await channel.bindQueue(SMS_QUEUE, PARCEL_EXCHANGE, rk);
+        await channel.bindQueue(WEBHOOK_QUEUE, PARCEL_EXCHANGE, rk);
+      }
+
+      logger.info(' Connected to RabbitMQ queues (Email, SMS, Webhook, DLQ)!');
       isConsumerHealthy = true;
 
       // 1. Email Consumer
@@ -155,10 +326,10 @@ async function startRabbitMqConsumer() {
         if (!msg) return;
         try {
           const payload = JSON.parse(msg.content.toString());
-          logger.info(`📧 [EMAIL-QUEUE] Received event: ${payload.event} for parcel: ${payload.trackingNumber}`);
+          logger.info(`📧 [EMAIL-QUEUE] Received event: ${payload.event || payload.eventType} for parcel: ${payload.trackingNumber}`);
           await sendEmailNotification(payload);
 
-          // Push live event to frontend browsers over SSE!
+          // Push live event to frontend browsers over SSE with all fields!
           broadcastSse({
             ...payload,
             type: 'PARCEL_NOTIFICATION',
@@ -191,11 +362,25 @@ async function startRabbitMqConsumer() {
         if (!msg) return;
         try {
           const payload = JSON.parse(msg.content.toString());
-          logger.info(`📱 [SMS-QUEUE] Received event: ${payload.event} for parcel: ${payload.trackingNumber}`);
+          logger.info(`📱 [SMS-QUEUE] Received event: ${payload.event || payload.eventType} for parcel: ${payload.trackingNumber}`);
           await sendSmsNotification(payload);
           channel.ack(msg);
         } catch (err) {
           logger.error(`❌ [SMS-QUEUE] Failed to process SMS: ${err.message}`);
+          channel.nack(msg, false, !msg.fields.redelivered);
+        }
+      });
+
+      // 3. Webhook Consumer (B2B Merchant Notifications)
+      channel.consume(WEBHOOK_QUEUE, async (msg) => {
+        if (!msg) return;
+        try {
+          const payload = JSON.parse(msg.content.toString());
+          logger.info(`🔗 [WEBHOOK-QUEUE] Received event: ${payload.event || payload.eventType} for parcel: ${payload.trackingNumber}`);
+          await dispatchWebhookNotification(payload);
+          channel.ack(msg);
+        } catch (err) {
+          logger.error(`❌ [WEBHOOK-QUEUE] Failed to process webhook: ${err.message}`);
           channel.nack(msg, false, !msg.fields.redelivered);
         }
       });

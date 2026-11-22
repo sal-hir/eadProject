@@ -10,6 +10,103 @@ export const NotificationCenterProvider = ({ children }) => {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [notifications, setNotifications] = useState([]);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('swiftdrop_sound_enabled') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [desktopPushEnabled, setDesktopPushEnabled] = useState(() => {
+    return typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted';
+  });
+
+  // Synthesize soft dual-tone alert chime (Web Audio API - zero external audio asset dependencies)
+  const playChime = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      // Harmonic dual-tone ascending chime (587.33Hz -> 880Hz)
+      osc.frequency.setValueAtTime(587.33, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+
+      gain.gain.setValueAtTime(0.001, now);
+      gain.gain.exponentialRampToValueAtTime(0.2, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.36);
+    } catch (e) {
+      // Audio playback restrictions before user interaction
+    }
+  }, []);
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('swiftdrop_sound_enabled', String(next));
+      } catch (e) {}
+      if (next) playChime();
+      return next;
+    });
+  }, [playChime]);
+
+  // Request HTML5 native desktop notifications
+  const requestDesktopPush = useCallback(async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      alert('Your browser does not support desktop notifications.');
+      return false;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      const granted = permission === 'granted';
+      setDesktopPushEnabled(granted);
+      if (granted) {
+        new Notification('SwiftDrop Notifications Active', {
+          body: 'You will now receive desktop delivery alerts.',
+          icon: '/favicon.ico',
+        });
+        playChime();
+      }
+      return granted;
+    } catch (e) {
+      console.error('Failed to request desktop notification permission', e);
+      return false;
+    }
+  }, [playChime]);
+
+  const triggerDesktopNotification = useCallback(({ title, message, trackingNumber }) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      try {
+        const n = new Notification(title, {
+          body: message,
+          icon: '/favicon.ico',
+          tag: trackingNumber || 'swiftdrop-alert',
+        });
+        n.onclick = () => {
+          window.focus();
+          if (trackingNumber) {
+            window.location.href = `/track/${trackingNumber}`;
+          }
+        };
+      } catch (e) {
+        console.warn('Desktop notification display failed', e);
+      }
+    }
+  }, []);
 
   // Load user-specific notifications from localStorage on login
   useEffect(() => {
@@ -32,15 +129,7 @@ export const NotificationCenterProvider = ({ children }) => {
             tone: 'info',
             timestamp: new Date().toISOString(),
             read: false,
-            link: user.role === 'COURIER'
-              ? '/courier'
-              : (user.role === 'MERCHANT'
-                ? '/merchant'
-                : (user.role === 'ADMIN'
-                  ? '/admin'
-                  : (user.role === 'DISPATCHER'
-                    ? '/dispatcher/dashboard'
-                    : '/customer'))),
+            link: user.role === 'COURIER' ? '/courier' : '/customer',
           },
         ];
         setNotifications(initial);
@@ -84,8 +173,19 @@ export const NotificationCenterProvider = ({ children }) => {
     if (showToast) {
       addToast({ title, message, tone, duration: 6000 });
     }
+
+    // Play subtle audio alert chime if sound is enabled
+    if (soundEnabled) {
+      playChime();
+    }
+
+    // Native desktop alert if user is outside this browser tab
+    if (desktopPushEnabled && typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+      triggerDesktopNotification({ title, message, trackingNumber });
+    }
+
     return item;
-  }, [saveNotifications, addToast]);
+  }, [saveNotifications, addToast, soundEnabled, playChime, desktopPushEnabled, triggerDesktopNotification]);
 
   // Connect to Notification Service SSE Stream for real-time live events from RabbitMQ
   useEffect(() => {
@@ -122,107 +222,13 @@ export const NotificationCenterProvider = ({ children }) => {
 
             if (data.type === 'PARCEL_NOTIFICATION' || data.type === 'PARCEL_STATUS_UPDATE') {
               const currentEmail = user?.email?.toLowerCase().trim();
-              const currentId = user?.id;
-              const currentRole = user?.role;
-              const targetRecipientEmail = data.recipientEmail?.toLowerCase().trim();
-              const targetSenderEmail = (data.senderEmail || data.merchantEmail)?.toLowerCase().trim();
-              const targetCourierId = data.courierId;
-              const targetCourierEmail = data.courierEmail?.toLowerCase().trim();
-              const targetCourierName = data.courierName?.toLowerCase().trim();
+              const targetEmail = data.recipientEmail?.toLowerCase().trim();
 
-              let isTargetUser = false;
-              let roleLink = data.trackingNumber ? `/track/${data.trackingNumber}` : null;
-              let title = `Parcel ${data.trackingNumber || 'Update'}: ${data.newStatus || 'UPDATED'}`;
-              let message = data.note || `Status transitioned to ${data.newStatus || 'UPDATED'}`;
-
-              // 1. ADMIN & DISPATCHER: Platform operations see all events across the fleet
-              if (currentRole === 'ADMIN' || currentRole === 'DISPATCHER') {
-                isTargetUser = true;
-                roleLink = currentRole === 'ADMIN' ? '/admin' : '/dispatcher/dashboard';
-                if (data.event === 'parcel.created') {
-                  title = `New Parcel Created: ${data.trackingNumber || 'Booking'}`;
-                  message = `Shipment registered for ${data.recipientName || 'customer'} (${data.dropoffCity || ''})`;
-                } else if (data.event === 'parcel.assigned') {
-                  title = `Courier Assigned: ${data.trackingNumber || 'Parcel'}`;
-                  message = `Courier ${data.courierName || 'assigned'} assigned for pickup`;
-                } else if (data.newStatus === 'FAILED') {
-                  title = `⚠️ Delivery Exception: ${data.trackingNumber || 'Parcel'}`;
-                  message = data.failureReason || data.note || 'Delivery attempt failed.';
-                } else if (data.newStatus === 'DELIVERED') {
-                  title = `Parcel Delivered: ${data.trackingNumber || 'Parcel'}`;
-                  message = `Successfully delivered to ${data.recipientName || 'customer'}.`;
-                }
-              }
-              // 2. COURIER: Sees tasks assigned to them or available for collection
-              else if (currentRole === 'COURIER') {
-                const isAssignedToMe = (targetCourierId && targetCourierId === currentId) ||
-                  (targetCourierEmail && currentEmail && targetCourierEmail === currentEmail) ||
-                  (targetCourierName && user?.name && targetCourierName === user.name.toLowerCase().trim());
-
-                if (isAssignedToMe || data.event === 'parcel.assigned' || data.newStatus === 'PENDING_PICKUP') {
-                  isTargetUser = true;
-                  roleLink = '/courier';
-                  if (data.event === 'parcel.assigned') {
-                    title = `New Delivery Assignment: ${data.trackingNumber || ''}`;
-                    message = `You have been assigned parcel ${data.trackingNumber || ''}. Check pickup details.`;
-                  } else if (data.newStatus === 'PENDING_PICKUP') {
-                    title = `Pickup Ready: ${data.trackingNumber || ''}`;
-                    message = `Parcel is prepared for collection at pickup address.`;
-                  } else if (data.newStatus === 'CANCELLED') {
-                    title = `Task Cancelled: ${data.trackingNumber || ''}`;
-                    message = `Delivery for parcel ${data.trackingNumber || ''} has been cancelled.`;
-                  }
-                }
-              }
-              // 3. MERCHANT: Sees parcels dispatched from their merchant store
-              else if (currentRole === 'MERCHANT') {
-                const isMyStore = (targetSenderEmail && currentEmail && targetSenderEmail === currentEmail) ||
-                  (data.merchantId && data.merchantId === currentId) ||
-                  (!targetSenderEmail && !data.merchantId);
-
-                if (isMyStore) {
-                  isTargetUser = true;
-                  roleLink = '/merchant';
-                  if (data.event === 'parcel.created') {
-                    title = `Order Confirmed: ${data.trackingNumber || ''}`;
-                    message = `Shipment booked for ${data.recipientName || 'customer'}. Awaiting courier pickup.`;
-                  } else if (data.newStatus === 'PICKED_UP') {
-                    title = `Courier Collected: ${data.trackingNumber || ''}`;
-                    message = `Courier ${data.courierName || ''} picked up order for ${data.recipientName || 'customer'}.`;
-                  } else if (data.newStatus === 'OUT_FOR_DELIVERY') {
-                    title = `Out for Delivery: ${data.trackingNumber || ''}`;
-                    message = `Order is on its final delivery route to ${data.recipientName || 'customer'}.`;
-                  } else if (data.newStatus === 'DELIVERED') {
-                    title = `Delivered: ${data.trackingNumber || ''}`;
-                    message = `Order successfully delivered to ${data.recipientName || 'customer'}.`;
-                  } else if (data.newStatus === 'FAILED') {
-                    title = `Delivery Issue: ${data.trackingNumber || ''}`;
-                    message = `Delivery to ${data.recipientName || 'customer'} failed: ${data.failureReason || 'Action required'}.`;
-                  }
-                }
-              }
-              // 4. CUSTOMER / DEFAULT: Sees parcels addressed to them
-              else {
-                const isRecipient = !targetRecipientEmail || (currentEmail && targetRecipientEmail === currentEmail) || !user;
-
-                if (isRecipient) {
-                  isTargetUser = true;
-                  roleLink = data.trackingNumber ? `/track/${data.trackingNumber}` : '/customer';
-                  if (data.event === 'parcel.created') {
-                    title = `Parcel Booked: ${data.trackingNumber || ''}`;
-                    message = 'Your delivery request was created and confirmed.';
-                  } else if (data.event === 'parcel.assigned') {
-                    title = `Courier Assigned: ${data.trackingNumber || ''}`;
-                    message = data.courierName
-                      ? `Courier ${data.courierName} is assigned to collect your parcel.`
-                      : 'A courier has been assigned to collect your package.';
-                  } else if (data.newStatus === 'FAILED') {
-                    message = data.failureReason
-                      ? `Delivery attempt failed: ${data.failureReason}`
-                      : (data.note || 'Delivery attempt unsuccessful.');
-                  }
-                }
-              }
+              const isTargetUser = !targetEmail ||
+                !currentEmail ||
+                targetEmail === currentEmail ||
+                user?.role === 'ADMIN' ||
+                user?.role === 'CUSTOMER';
 
               if (isTargetUser) {
                 const statusToneMap = {
@@ -236,12 +242,28 @@ export const NotificationCenterProvider = ({ children }) => {
                   PENDING_PICKUP: 'info',
                 };
 
+                let title = `Parcel ${data.trackingNumber || 'Update'}: ${data.newStatus || 'UPDATED'}`;
+                let message = data.note || `Status transitioned to ${data.newStatus || 'UPDATED'}`;
+
+                if (data.event === 'parcel.created') {
+                  title = `Parcel Booked: ${data.trackingNumber}`;
+                  message = 'Your delivery request was created and confirmed.';
+                } else if (data.event === 'parcel.assigned') {
+                  title = `Courier Assigned: ${data.trackingNumber}`;
+                  message = data.courierName
+                    ? `Courier ${data.courierName} is assigned to collect your parcel.`
+                    : 'A courier has been assigned to collect your package.';
+                } else if (data.newStatus === 'FAILED') {
+                  message = data.failureReason
+                    ? `Delivery attempt failed: ${data.failureReason}`
+                    : (data.note || 'Delivery attempt unsuccessful.');
+                }
+
                 notify({
                   title,
                   message,
                   tone: statusToneMap[data.newStatus] || 'info',
                   trackingNumber: data.trackingNumber,
-                  link: roleLink,
                   showToast: true,
                 });
               }
@@ -304,7 +326,12 @@ export const NotificationCenterProvider = ({ children }) => {
     markAsRead,
     markAllAsRead,
     clearAll,
-  }), [notifications, unreadCount, notify, markAsRead, markAllAsRead, clearAll]);
+    soundEnabled,
+    toggleSound,
+    desktopPushEnabled,
+    requestDesktopPush,
+    playChime,
+  }), [notifications, unreadCount, notify, markAsRead, markAllAsRead, clearAll, soundEnabled, toggleSound, desktopPushEnabled, requestDesktopPush, playChime]);
 
   return (
     <NotificationCenterContext.Provider value={value}>
